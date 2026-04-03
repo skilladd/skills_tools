@@ -39,7 +39,7 @@ main_menu() {
             6) submenu6 ;;
             7) submenu7 ;;
             0) exit 0 ;;
-            *) print_error "无效选项"; sleep 1 ;;
+            *) log_error "无效选项"; sleep 1 ;;
         esac
     done
 }
