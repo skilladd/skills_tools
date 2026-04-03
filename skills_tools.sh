@@ -638,8 +638,6 @@ submenu2-1(){
 
 }
 submenu2-2(){
-    #     local country
-    #     IPINFO_TOKEN="551146b926f4a8"
     while true; do
         select_menu "服务器网络测试 - $(get_public_ip)" "三网回程延迟路由测试(besttrace)" "三网回程线路测试(mtr_trace)" "网络带宽测试" "返回上级菜单"
         choice=$?
