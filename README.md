@@ -4,7 +4,7 @@
 
 ![](https://github.com/skilladd/skills_tools/blob/main/logo.png)
 
-适用系统：Ubuntu 20.04+ / Debian 11+ / CentOS 7+ (需支持 systemd)
+**适用系统**：Ubuntu 20.04+ / Debian 11+ / CentOS 7+ (需支持 systemd)
 
 # 菜单功能
 1. 系统源更新/设置
