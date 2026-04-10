@@ -2382,7 +2382,7 @@ Komari_panel(){
             1) komari_status="服务存在但未运行" ;;
             2) komari_status=$(check_docker "komari") ;;
         esac
-        select_menu "Komari面板安装指南 状态：$komari_status" "安装Komari面板（docker)" "卸载Komari面板（docker)" "Komari面板(安装卸载一键脚步)" "卸载komari面板的Agent" "返回上级菜单"
+        select_menu "Komari面板安装指南 状态：$komari_status" "安装Komari面板（docker)" "卸载Komari面板（docker)" "Komari面板(安装卸载一键脚本)" "卸载komari面板的Agent" "返回上级菜单"
         choice=$?
         case $choice in
             0) clear;Komari_install_docker;go_back ;;
@@ -2429,7 +2429,7 @@ Beszel_panel(){
             1) beszel_status="服务存在但未运行" ;;
             2) beszel_status=$(check_docker "beszel") ;;
         esac
-        select_menu "Beszel面板安装指南 状态：$beszel_status" "安装Beszel面板（docker)" "卸载Beszel面板（docker)" "Beszel面板(安装一键脚步)" "卸载Beszel面板的" "卸载Beszel面板的Agent" "返回上级菜单"
+        select_menu "Beszel面板安装指南 状态：$beszel_status" "安装Beszel面板（docker)" "卸载Beszel面板（docker)" "Beszel面板(安装一键脚本)" "卸载Beszel面板的" "卸载Beszel面板的Agent" "返回上级菜单"
         choice=$?
 
         case $choice in
@@ -2444,7 +2444,7 @@ Beszel_panel(){
 }
 
 Beszel_install_sh(){
-    log_title "Beszel面板(安装一键脚步)"
+    log_title "Beszel面板(安装一键脚本)"
     validate_port "8090"
     read -p "是否启用每日自动更新？(y/n，默认n): " auto_update
     if [[ "$change_port" =~ ^[Yy]$ ]]; then
@@ -2955,6 +2955,108 @@ cf_fail2ban_uninstall(){
 
 
 # ------------- 子菜单功能7 -------------
+
+submenu7() {
+    while true; do
+        select_menu "其他扩展工具" "API密钥管理相关" "返回主菜单"
+        choice=$?
+        case $choice in
+            0) clear;submenu7-1;;
+            1) return ;;
+        esac
+    done
+}
+
+submenu7-1(){
+    while true; do
+        select_menu "API密钥管理相关" "CLIProxyAPI" "返回主菜单"
+        choice=$?
+        case $choice in
+            0) clear;cliproxyapi_panel;;
+            1) return ;;
+        esac
+    done
+}
+
+cliproxyapi_panel(){
+    local cliproxyapi_status
+    while true; do
+        if systemctl --user is-active --quiet cliproxyapi; then
+            cliproxyapi_status="运行中"
+        elif systemctl --user list-unit-files | grep -q '^cliproxyapi.service'; then
+            cliproxyapi_status="已停止"
+        else
+            cliproxyapi_status="未安装"
+        fi
+        select_menu "CLIProxyAPI 状态：$cliproxyapi_status" "安装并运行(一键脚本)"  "卸载cliproxyapi(sh)" "返回上级菜单"
+        choice=$?
+        case $choice in
+            0) clear; cliproxyapi_install_sh ;go_back;;
+            1) clear;if systemctl --user is-active --quiet cliproxyapi; then  cliproxyapi_uninstall_sh ;else log_warning "cliproxyapi未安装运行" ;fi ;go_back;;
+            2) return ;;
+        esac
+    done
+}
+
+cliproxyapi_install_sh(){
+    log_title "安装 cliproxyapi ..." 
+    curl -fsSL https://raw.githubusercontent.com/brokechubb/cliproxyapi-installer/refs/heads/master/cliproxyapi-installer | bash 
+    clear
+    log_title "设置管理密钥"
+    CONFIG_FILE="$PWD/cliproxyapi/config.yaml"
+    # 检查文件是否存在
+    if [ ! -f "$CONFIG_FILE" ]; then
+        log_error "错误: 配置文件 $CONFIG_FILE 不存在"
+    
+    else
+        local BACKUP_FILE="${CONFIG_FILE}.backup.$(date +%Y%m%d_%H%M%S)"
+        sudo cp "$CONFIG_FILE" "$BACKUP_FILE"
+        log_success "已备份原配置到 $BACKUP_FILE"
+        
+        while true; do
+            read -p "请输入访问 管理密钥: " SECRET_KEY
+            if [ -z "$SECRET_KEY" ]; then
+                # 如果留空，设置为空字符串（即 secret-key: ""）
+                log_error "如果不设置管理密钥，是无法访问呃（不可留空）"
+                continue
+            else
+                ESCAPED_KEY=$(printf '%s\n' "$SECRET_KEY" | sed 's/[&/\]/\\&/g')
+                sed -i 's/^\([[:space:]]*secret-key:\) ".*"$/\1 "'"$ESCAPED_KEY"'"/' "$CONFIG_FILE"
+                log_success "已设置 secret-key"
+                break
+            fi
+        done
+
+        sed -i 's/^\([[:space:]]*allow-remote:\) false$/\1 true/' "$CONFIG_FILE"
+        log_success "已设置 allow-remote: true"
+        log_success "配置文件修改完成！"
+
+        log_info "设置服务开机自启动"
+        systemctl --user enable cliproxyapi.service
+        log_info "启动cliproxyapi服务"
+        systemctl --user start cliproxyapi.service
+        log_success "访问Web UI的IP地址为：http://$(get_public_ip):8317/management.html#/login"
+    fi
+
+
+}
+
+cliproxyapi_uninstall_sh(){
+    log_title "卸载 cliproxyapi ..." 
+
+    curl -fsSL https://raw.githubusercontent.com/brokechubb/cliproxyapi-installer/refs/heads/master/cliproxyapi-installer | bash -s uninstall
+
+    log_info "停止服务"
+    systemctl --user stop cliproxyapi.service
+    log_info "禁用服务"
+    systemctl --user disable cliproxyapi.service
+    log_info "删除服务文件"
+    sudo rm -f ~/.config/systemd/user/cliproxyapi.service
+    sudo rm -rf $PWD/cliproxyapi
+    log_info "重新加载 systemd 配置"
+    systemctl --user daemon-reload
+    log_success "卸载完成"
+}
 
 
 
