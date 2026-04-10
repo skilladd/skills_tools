@@ -30,8 +30,10 @@
 	1. 信息收集
 	2. 网站防御
 		1. Cloudflare + Nginx + fail2ban防御
-7. 其他扩展工具（后续添加）
-8) 退出
+7. 其他扩展工具
+	1. API密钥管理相关
+		1. CLIProxyAPI
+8. 退出
 
 
 
