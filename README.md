@@ -4,9 +4,9 @@
 
 ![](https://github.com/skilladd/skills_tools/blob/main/logo.png)
 
+适用系统：Ubuntu 20.04+ / Debian 11+ / CentOS 7+ (需支持 systemd)
+
 # 菜单功能
-
-
 1. 系统源更新/设置
 	1. 系统源的更新
 2. 系统测试常用的工具
@@ -26,7 +26,10 @@
 5. VPN搭建工具
 	1. 安装3x-ui面板
 	2. winguard异地组网
-6. 网络安全工具（后续添加）
+6. 网络安全工具
+	1. 信息收集
+	2. 网站防御
+		1. Cloudflare + Nginx + fail2ban防御
 7. 其他扩展工具（后续添加）
 8) 退出
 
