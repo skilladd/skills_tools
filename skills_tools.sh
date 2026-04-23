@@ -3533,23 +3533,22 @@ cf_lua_redis_uninstall(){
     # 4. 询问是否移除软件包
     read -p "是否移除 redis-server 和 nginx-extras? (y/N): " -r
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        if [ "$OS_FAMILY" = "debian" ]; then
-            sudo apt-get remove --purge -y nginx-extras redis-server
-            sudo apt-get autoremove -y
-        else
-            sudo yum remove -y openresty redis
-            sudo yum autoremove -y
-        fi
+        case "$(detect_os)" in
+            debian|ubuntu)
+                sudo apt-get remove --purge -y nginx-extras redis-server
+                sudo apt-get autoremove -y
+                ;;
+            centos|rhel|rocky|almalinux)
+                sudo yum remove -y openresty redis
+                sudo yum autoremove -y
+                ;;
+            *)
+                error "卸载失败"
+                ;;
+        esac
     else
         info "保留软件包，仅移除封禁配置"
-    fi
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        sudo apt-get remove --purge -y redis-server nginx-extras
-        sudo apt-get autoremove -y
-    else
-        info "保留 redis-server 和 nginx-extras，可手动管理"
-    fi
-    
+    fi    
     systemctl restart nginx
     info "✅ 卸载完成。"
 }
