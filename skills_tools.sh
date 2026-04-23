@@ -19,7 +19,7 @@ main_menu() {
         echo "   ████   ████    ████ ██      ████      █████████  ██     ████ █████████ ██   ██    ██    ██    v0.1  "
         echo "===================================================================================================="   
         echo -e "${NC}"                                
-        log_title "主菜单：$(detect_os)"
+        title "主菜单：$(detect_os)"
         echo -e "${BLUE}1) 系统源更新/设置${NC}"
         echo -e "${YELLOW}2) 系统测试常用的工具${NC}"
         echo -e "${GREEN}3) 网站建站工具${NC}"
@@ -39,7 +39,7 @@ main_menu() {
             6) submenu6 ;;
             7) submenu7 ;;
             0) exit 0 ;;
-            *) log_error "无效选项"; sleep 1 ;;
+            *) error "无效选项"; sleep 1 ;;
         esac
     done
 }
@@ -80,19 +80,19 @@ PINK='\033[1;35m'
 MAGENTA='\033[1;35m' #紫色
 NC='\033[0m' # 无色
 #打印标题
-log_title() {
+title() {
     echo -e "${PINK}========== $1 ==========${NC}" >&2
 }
-log_info(){
+info(){
     echo -e "${BLUE}[INFO]  $1${NC}" >&2
 }
-log_error(){
+error(){
     echo -e "${RED}[ERROR]  $1${NC}" >&2
 }
-log_warning(){
+warn(){
     echo -e "${YELLOW}[warning]  $1${NC}" >&2
 }
-log_success(){
+success(){
     echo -e "${GREEN}[success]  $1${NC}" >&2
 }
 #检测系统发行版和版本
@@ -194,11 +194,11 @@ check_and_install_tools() {
     done
 
     if [ ${#missing_tools[@]} -eq 0 ]; then
-        log_success "所有必要工具已安装。"
+        success "所有必要工具已安装。"
         return
     fi
 
-    log_warning "检测到以下工具缺失：${missing_tools[*]}，尝试安装..."
+    warn "检测到以下工具缺失：${missing_tools[*]}，尝试安装..."
 
     
     # 设置安装命令（根据系统类型）
@@ -217,7 +217,7 @@ check_and_install_tools() {
             fi
             ;;
         *)
-            log_error "不支持的发行版：$(detect_os)，请手动安装依赖。"
+            error "不支持的发行版：$(detect_os)，请手动安装依赖。"
             return
             ;;
     esac
@@ -226,7 +226,7 @@ check_and_install_tools() {
     for tool in "${missing_tools[@]}"; do
         local pkg_name="${pkg_map_ref[$tool]}"
         if [[ -z "$pkg_name" ]]; then
-            log_error "未知的包名：$pkg_name，跳过。"
+            error "未知的包名：$pkg_name，跳过。"
             continue
         fi
         echo -n "正在安装 ${pkg_name} ... "
@@ -236,29 +236,17 @@ check_and_install_tools() {
         show_spinner $install_pid
         wait $install_pid
         if [ $? -eq 0 ]; then
-            log_success "工具安装完成。"
+            success "工具安装完成。"
         else
-            log_error "工具安装失败。"
-            
+            error "工具安装失败。"
+            info "请尝试手动安装一下软件，命令：$install_cmd $pkg_name"
+            go_back
         fi
     done
     
 }
 
-#存放路径
-save_file(){
-    local catalogue=$1
-    local dir_path="/tmp/$catalogue"
-    if [ -e "$dir_path" ]; then
-        log_warning "文件已经存在"
-        log_info "$dir_path"
-        return 0
-    else
-        sudo mkdir -p "$dir_path"
-        log_info "$dir_path"
-        return 0
-    fi
-}
+
 
 # 倒计时返回
 countdown(){
@@ -287,11 +275,11 @@ validate_port() {
         read -p "请输入代理访问监听端口 (1-65535，回车默认 $port): " LISTEN_PORT
         LISTEN_PORT=${LISTEN_PORT:-$port}
         if ! [[ $LISTEN_PORT =~ ^[0-9]+$ ]] && [ $LISTEN_PORT -ge 1 ] && [ $LISTEN_PORT -le 65535 ] ; then
-            log_error "无效端口号，请输入 1-65535 之间的数字。"
+            error "无效端口号，请输入 1-65535 之间的数字。"
             continue
         fi
         if ss -tln | grep -q ":$LISTEN_PORT "; then
-            log_warning "警告：端口 $LISTEN_PORT 已被占用，可以选择其他端口。"
+            warn "警告：端口 $LISTEN_PORT 已被占用，可以选择其他端口。"
             read -p "是否继续使用该端口？(y/n, 默认n): " confirm
             [[ "$confirm" == "y" ]] && break || continue
         else
@@ -361,7 +349,7 @@ get_public_ip(){
 
 docker_install_sh() {
     if ! check_cmd docker &>/dev/null; then
-        log_warning "Docker 未安装，开始安装..."
+        warn "Docker 未安装，开始安装..."
         # 安装 Docker
         echo -n "Docker 正在安装 ... "
         sudo curl -sSL https://get.docker.com | sudo bash >/dev/null 2>&1 &
@@ -369,20 +357,20 @@ docker_install_sh() {
         show_spinner "$install_pid"
         wait "$install_pid"
         if [ $? -eq 0 ]; then
-            log_success "Docker 安装成功，正在启动服务..."
+            success "Docker 安装成功，正在启动服务..."
             sudo systemctl start docker
             sudo systemctl enable docker
-            log_success "Docker 服务已启动并设置开机自启"
+            success "Docker 服务已启动并设置开机自启"
             return 0
         else
-            log_error "Docker 安装失败"
+            error "Docker 安装失败"
             return 1
         fi
     else
-        log_warning "Docker 已存在，跳过安装。"
+        warn "Docker 已存在，跳过安装。"
         # 即使已安装，也确保服务正在运行（可选）
         if ! systemctl is-active --quiet docker; then
-            log_warning "Docker 服务未运行，正在启动..."
+            warn "Docker 服务未运行，正在启动..."
             sudo systemctl start docker
             sudo systemctl enable docker
             
@@ -439,31 +427,56 @@ check_service(){
     fi
 }
 
+#验证定时任务的输入
+validate_cron_nput() {
+    local input="$1"
+    local field="$2"
+    local min="$3"
+    local max="$4"
 
+    # 允许空字符串（表示使用默认 *）
+    if [[ -z "$input" ]]; then
+        return 0
+    fi
 
+    # 允许常见的特殊符号：* , - /
+    if [[ "$input" =~ ^[\*0-9\,\-\/]+$ ]]; then
+        # 更细致的校验：检查 */ 或数字范围等
+        if [[ "$input" =~ ^[0-9]+$ ]]; then
+            if (( input < min || input > max )); then
+                error "错误：$field 的值 $input 不在范围 $min-$max 内"
+                return 1
+            fi
+        fi
+        return 0
+    else
+        error "错误：$field 包含非法字符，只能使用数字、*、,、-、/"
+        return 1
+    fi
+}
 
 
 # ------------- 子菜单功能1 -------------
 submenu1() {
 	while true; do
-	
-	select_menu "系统参数设置面板 - 当前系统: $(detect_os)" "系统源的更新" "返回主菜单"
-	choice=$?
-	case $choice in
-	    0) clear; update_repo && log_success "更新成功"; countdown ;;
-	    1) return ;;
-	esac
+        select_menu "系统参数设置面板 - 当前系统: $(detect_os)" "系统源的更新" "设置系统定时执行的任务" "返回主菜单"
+        choice=$?
+        case $choice in
+            0) clear; update_repo && success "更新成功"; countdown ;;
+            1) clear; setup_cron ;;
+            2) return ;;
+        esac
 	done
 }
 
 update_repo(){
     case "$(detect_os)" in
         ubuntu|debian|kali)
-            log_info "检测到 Debian/Ubuntu 系统，执行 apt update..."
+            info "检测到 Debian/Ubuntu 系统，执行 apt update..."
             sudo apt update
             ;;
         rhel|centos|fedora|rocky|almalinux)
-            log_info "检测到 RHEL/CentOS/Fedora 系统，执行 yum/dnf 更新..."
+            info "检测到 RHEL/CentOS/Fedora 系统，执行 yum/dnf 更新..."
             if command -v dnf >/dev/null 2>&1; then
                 sudo dnf makecache
             else
@@ -471,22 +484,192 @@ update_repo(){
             fi
             ;;
         arch|manjaro)
-            log_info "检测到 Arch/Manjaro 系统，执行 pacman -Sy..."
+            info "检测到 Arch/Manjaro 系统，执行 pacman -Sy..."
             sudo pacman -Sy
             ;;
         opensuse|suse)
-            log_info "检测到 openSUSE 系统，执行 zypper refresh..."
+            info "检测到 openSUSE 系统，执行 zypper refresh..."
             sudo zypper refresh
             ;;
         alpine)
-            log_info "检测到 Alpine 系统，执行 apk update..."
+            info "检测到 Alpine 系统，执行 apk update..."
             sudo apk update
             ;;
         *)
-            log_info "未知或不支持的系统类型: $sys_type"
+            info "未知或不支持的系统类型: $sys_type"
             return 1
             ;;
     esac
+}
+
+setup_cron(){
+    while true; do
+        select_menu "设置系统定时执行的任务 - 当前系统: $(detect_os)" "添加定时任务" "查看当前系统定时任务" "删除定时任务" "返回上级菜单"
+        choice=$?
+        case $choice in
+            0) clear; add_cron; go_back ;;
+            1) clear; list_cron; go_back ;;
+            2) clear; delete_cron; go_back ;;
+            3) return ;;
+        esac
+	done
+}
+
+add_cron(){
+    title "添加定时任务"
+    cat << EOF
+    示例：
+        每天凌晨 3:30     → 分钟=30, 小时=3, 日期=*, 月份=*, 星期=*
+        每月1号 0:0       → 分钟=0, 小时=0, 日期=1, 月份=*, 星期=*
+        每周一 5:15       → 分钟=15, 小时=5, 日期=*, 月份=*, 星期=1
+        每 10 分钟        → 分钟=*/10, 小时=*, 日期=*, 月份=*, 星期=*
+EOF
+    title "输入定时任务执行的时间"
+    # 获取分钟
+    while true; do
+        read -p "分钟 (0-59, 默认 *) : " minute
+        if validate_cron_nput "$minute" "分钟" 0 59; then
+            minute=${minute:-*}
+            break
+        fi
+    done
+
+    # 获取小时
+    while true; do
+        read -p "小时 (0-23, 默认 *) : " hour
+        if validate_cron_nput "$hour" "小时" 0 23; then
+            hour=${hour:-*}
+            break
+        fi
+    done
+
+    # 获取日期（月份中的第几天）
+    while true; do
+        read -p "日期 (1-31, 默认 *) : " day
+        if validate_cron_nput "$day" "日期" 1 31; then
+            day=${day:-*}
+            break
+        fi
+    done
+
+    # 获取月份
+    while true; do
+        read -p "月份 (1-12, 默认 *) : " month
+        if validate_cron_nput "$month" "月份" 1 12; then
+            month=${month:-*}
+            break
+        fi
+    done
+
+    # 获取星期
+    while true; do
+        read -p "星期 (0-7, 0和7=周日, 默认 *) : " weekday
+        if validate_cron_nput "$weekday" "星期" 0 7; then
+            weekday=${weekday:-*}
+            break
+        fi
+    done
+
+    # 获取要执行的命令
+    while true; do
+        read -p "请输入要定时执行的完整命令（例如：/usr/bin/backup.sh）: " command
+        if [[ -z "$command" ]]; then
+            error "命令不能为空，请重新输入"
+        else
+            break
+        fi
+    done
+    # 生成cron表达式
+    local cron_line="$minute $hour $day $month $weekday $command"
+    
+    # 显示确认信息
+    warn "即将添加以下定时任务："
+    info "    $cron_line"
+    read -p "确认添加吗？(y/N) " confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        success "已取消操作。"
+    else
+        # 备份当前 crontab
+        sudo crontab -l > /tmp/crontab_backup_$$ 2>/dev/null
+        if [[ $? -eq 0 ]]; then
+            success "已备份当前 crontab 到 /tmp/crontab_backup_$$"
+        fi
+
+        # 添加新任务（先去重，避免完全相同的行重复）
+        sudo crontab -l 2>/dev/null | grep -Fx "$cron_line" >/dev/null
+        if [[ $? -eq 0 ]]; then
+            warn "警告：该定时任务已经存在于 crontab 中，不会重复添加。"
+        else
+            (sudo crontab -l 2>/dev/null; echo "$cron_line") | crontab -
+            if [[ $? -eq 0 ]]; then
+                success "成功添加定时任务！"
+                info "当前用户的所有 crontab 任务如下："
+                crontab -l
+            else
+                error "添加失败，请检查权限或 crontab 格式。"
+            fi
+        fi
+    fi
+
+}
+
+# 查看定时任务
+list_cron() {
+    title "当前系统定时任务:"
+    sudo crontab -l 2>/dev/null || echo "没有设置定时任务"
+
+}
+
+delete_cron(){
+    # 获取当前定时任务
+    sudo crontab -l > /tmp/current_crontab 2>/dev/null
+    
+    # 检查是否有定时任务
+    if [ ! -s /tmp/current_crontab ]; then
+        warn "没有设置定时任务"
+        sudo rm -f /tmp/current_crontab
+        
+    else
+        # 列出定时任务并编号
+        title "当前定时任务:"
+        echo "------------------"
+        local line_num=1
+        while IFS= read -r line; do
+            if [ -n "$line" ]; then
+                echo "$line_num. $line"
+                line_num=$((line_num + 1))
+            fi
+        done < /tmp/current_crontab
+        echo "------------------"
+        
+        while true; do
+            read -p "请输入要删除的任务编号: " choice
+            if [[ ! $choice =~ ^[0-9]+$ ]]; then
+                error "错误: 请输入有效的数字"
+                sudo rm -f /tmp/current_crontab
+                continue
+            fi
+            local total_lines=$(wc -l < /tmp/current_crontab)
+            if [ $choice -lt 1 ] || [ $choice -gt $total_lines ]; then
+                error "错误: 无效的任务编号"
+                sudo rm -f /tmp/current_crontab
+                continue
+            fi
+            # 删除选中的任务
+            local line_to_delete=$choice
+            sudo awk -v line="$line_to_delete" 'NR != line' /tmp/current_crontab > /tmp/new_crontab
+
+            sudo crontab /tmp/new_crontab
+            if [ $? -eq 0 ]; then
+                success "成功: 定时任务已删除"
+            else
+                error "错误: 定时任务删除失败"
+            fi
+            break
+        done
+        sudo rm -f /tmp/current_crontab /tmp/new_crontab
+    fi
+  
 }
 
 
@@ -509,85 +692,85 @@ submenu2() {
 
 submenu2-1(){
     # 1. 系统版本和类型
-    log_title "系统版本和类型"
+    title "系统版本和类型"
     if check_cmd hostnamectl; then
         hostnamectl | grep -E "Operating System|Kernel|Architecture" | sed 's/^[[:space:]]*//' || true
     elif [ -f /etc/os-release ]; then
         . /etc/os-release
-        log_info "操作系统: $PRETTY_NAME"
-        log_info "系统类型: $(uname -o)"
+        info "操作系统: $PRETTY_NAME"
+        info "系统类型: $(uname -o)"
     elif [ -f /etc/issue ]; then
-        log_info "系统版本: $(cat /etc/issue | head -1)"
+        info "系统版本: $(cat /etc/issue | head -1)"
     else
-        log_error "无法获取系统版本信息"
+        error "无法获取系统版本信息"
     fi
-    log_info "内核版本: $(uname -r)"
+    info "内核版本: $(uname -r)"
     echo
 
     # 2. 内核详细信息
-    log_title "内核"
+    title "内核"
     uname -a
     echo
 
     # 3. CPU 参数
-    log_title "CPU 参数"
+    title "CPU 参数"
     if [ -f /proc/cpuinfo ]; then
-        log_info "CPU 型号: $(grep "model name" /proc/cpuinfo | head -1 | cut -d: -f2 | sed 's/^[ \t]*//')"
-        log_info "物理 CPU 数: $(grep "physical id" /proc/cpuinfo | sort -u | wc -l)"
-        log_info "每颗 CPU 核心数: $(grep "cpu cores" /proc/cpuinfo | head -1 | cut -d: -f2 | sed 's/^[ \t]*//')"
-        log_info "逻辑 CPU 总数: $(grep -c "processor" /proc/cpuinfo)"
+        info "CPU 型号: $(grep "model name" /proc/cpuinfo | head -1 | cut -d: -f2 | sed 's/^[ \t]*//')"
+        info "物理 CPU 数: $(grep "physical id" /proc/cpuinfo | sort -u | wc -l)"
+        info "每颗 CPU 核心数: $(grep "cpu cores" /proc/cpuinfo | head -1 | cut -d: -f2 | sed 's/^[ \t]*//')"
+        info "逻辑 CPU 总数: $(grep -c "processor" /proc/cpuinfo)"
         if grep -q "cpu MHz" /proc/cpuinfo; then
-            log_info "CPU 频率: $(grep "cpu MHz" /proc/cpuinfo | head -1 | cut -d: -f2 | sed 's/^[ \t]*//') MHz"
+            info "CPU 频率: $(grep "cpu MHz" /proc/cpuinfo | head -1 | cut -d: -f2 | sed 's/^[ \t]*//') MHz"
         elif check_cmd lscpu; then
             lscpu | grep "CPU MHz" | sed 's/^[[:space:]]*//'
         fi
     else
-        log_error "无法读取 CPU 信息"
+        error "无法读取 CPU 信息"
     fi
     echo
     # 4. 内存大小
-    log_title "内存大小"
+    title "内存大小"
     if check_cmd free; then
         free -h
     else
-        log_error "无法获取内存信息"
+        error "无法获取内存信息"
     fi
     echo
     # 5. 硬盘大小
-    log_title "硬盘大小"
+    title "硬盘大小"
     if check_cmd lsblk; then
-        log_info "物理磁盘信息："
+        info "物理磁盘信息："
         lsblk -d -o NAME,SIZE,MODEL 2>/dev/null || lsblk -d -o NAME,SIZE
     else
-        log_info "分区使用情况（df -h）："
+        info "分区使用情况（df -h）："
         df -h --total 2>/dev/null || df -h
     fi
     echo
     # 6. 后台运行的程序（仅显示运行软件，过滤内核线程）
-    log_title "后台运行的程序"
+    title "后台运行的程序"
     if check_cmd ps; then
         # 过滤掉内核线程（COMMAND 列包含 [ 的进程）
         total=$(ps aux | grep -c -v '\[.*\]')
-        log_info "运行软件列表（过滤内核线程，仅显示前20行，总数：$total）："
+        info "运行软件列表（过滤内核线程，仅显示前20行，总数：$total）："
         ps aux | grep -v '\[.*\]' | head -20
     else
-        log_error "ps 命令不可用"
+        error "ps 命令不可用"
     fi
     echo
 
     # 7. 系统的目录结构（根目录）
-    log_title "系统的目录结构（根目录）"
+    title "系统的目录结构（根目录）"
     ls -la /
     echo
     #8. 网络 IP 地址和网卡（内网 + 公网）
-    log_title "网络 IP 地址和网卡"
+    title "网络 IP 地址和网卡"
     echo "--- 内网 IP 地址（含回环）---"
     if check_cmd ip; then
         # 显示所有 IPv4 地址，包括回环
         ip -4 -o addr show | while read line; do
             iface=$(echo "$line" | awk '{print $2}' | cut -d: -f1)
             addr=$(echo "$line" | awk '{print $4}' | cut -d/ -f1)
-            log_info "接口: $iface, IP: $addr"
+            info "接口: $iface, IP: $addr"
         done
     elif check_cmd ifconfig; then
         ifconfig -a | grep -E '^[a-z]|inet ' | while read line; do
@@ -595,43 +778,43 @@ submenu2-1(){
                 iface=$(echo "$line" | cut -d: -f1)
             elif [[ $line =~ inet[[:space:]]+([0-9.]+) ]]; then
                 addr="${BASH_REMATCH[1]}"
-                log_info "接口: $iface, IP: $addr"
+                info "接口: $iface, IP: $addr"
             fi
         done
     else
-        log_error "无法获取内网 IP（缺少 ip/ifconfig 命令）"
+        error "无法获取内网 IP（缺少 ip/ifconfig 命令）"
     fi
 
-    log_title "公网 IP 地址"
-        log_info "公网的 IP $(get_public_ip)"
+    title "公网 IP 地址"
+        info "公网的 IP $(get_public_ip)"
     echo
 
 
     # 9. 系统安装的软件
-    log_title "系统安装的软件"
+    title "系统安装的软件"
     if command -v dpkg &>/dev/null; then
-        log_info "Debian/Ubuntu 系统，已安装软件包列表（dpkg -l）："
+        info "Debian/Ubuntu 系统，已安装软件包列表（dpkg -l）："
         # 使用 2>/dev/null 隐藏 dpkg 可能产生的错误（如权限不足）
         if dpkg -l 2>/dev/null | head -20 | grep -q .; then
             dpkg -l 2>/dev/null | head -20
-            log_info "... 总数：$(dpkg -l 2>/dev/null | wc -l)"
+            info "... 总数：$(dpkg -l 2>/dev/null | wc -l)"
         else
             echo "无法获取软件包列表，可能权限不足或 dpkg 数据库损坏。"
         fi
     elif command -v rpm &>/dev/null; then
-        log_info "RHEL/CentOS/Fedora 系统，已安装软件包列表（rpm -qa）："
+        info "RHEL/CentOS/Fedora 系统，已安装软件包列表（rpm -qa）："
         rpm -qa 2>/dev/null | head -20
-        log_info "... 总数：$(rpm -qa 2>/dev/null | wc -l)"
+        info "... 总数：$(rpm -qa 2>/dev/null | wc -l)"
     elif command -v pacman &>/dev/null; then
-        log_info "Arch Linux 系统，已安装软件包列表（pacman -Q）："
+        info "Arch Linux 系统，已安装软件包列表（pacman -Q）："
         pacman -Q 2>/dev/null | head -20
-        log_info "... 总数：$(pacman -Q 2>/dev/null | wc -l)"
+        info "... 总数：$(pacman -Q 2>/dev/null | wc -l)"
     elif command -v apk &>/dev/null; then
-        log_info "Alpine Linux 系统，已安装软件包列表（apk info）："
+        info "Alpine Linux 系统，已安装软件包列表（apk info）："
         apk info 2>/dev/null | head -20
-        log_info "... 总数：$(apk info 2>/dev/null | wc -l)"
+        info "... 总数：$(apk info 2>/dev/null | wc -l)"
     else
-        log_error "无法识别的包管理器，无法列出已安装软件"
+        error "无法识别的包管理器，无法列出已安装软件"
     fi
     echo
 
@@ -718,14 +901,14 @@ install_besttrace(){
         else
             echo "保留 $ZIP_FILE，下次运行可跳过下载。"
         fi
-        log_title "besttrace 安装成功！"
+        title "besttrace 安装成功！"
     
     fi
 }
 return_trip_besttrace(){
 
     if check_cmd "besttrace" ; then
-        log_success "besttrace工具已存在"
+        success "besttrace工具已存在"
     else
         install_besttrace
     fi
@@ -751,7 +934,7 @@ return_trip_besttrace(){
         ["上海移动"]="211.136.112.200"
         ["广州移动"]="211.139.129.5"
     )
-    log_title "三网回程延迟路由测试 (besttrace)"
+    title "三网回程延迟路由测试 (besttrace)"
     for name in "${!NODES[@]}"; do
         besttrace_node "$name" "${NODES[$name]}"
     done
@@ -763,7 +946,7 @@ return_trip_besttrace(){
 besttrace_node() {
     local name="$1"
     local ip="$2"
-    log_title  "测试节点：$name ($ip) "
+    title  "测试节点：$name ($ip) "
     besttrace -q 1 -n  -g cn "$ip" 
     echo ""
 }
@@ -834,7 +1017,7 @@ return_trip_mtr_trace(){
 network_speed(){
 
     if check_cmd "iperf3" ; then
-        log_success "iperf3工具已存在"
+        success "iperf3工具已存在"
     else
         local -A MY_PKG_MAP=(
             ["iperf3"]="iperf3"
@@ -888,7 +1071,7 @@ network_speed(){
     "Speedtest.de   | Frankfurt, DE (10G)   | speedtest.wtnet.de       | 5200"
     "Misaka.io      | Tokyo, JP (1G)        | tyo02.iperf.misaka.io    | 5201"
     )
-    log_title "网络带宽测试"
+    title "网络带宽测试"
     printf "%-15s | %-22s | %-16s | %-16s | %-10s\n" "供应商" "  地区" "  上传速度" "  下载速度" "  Ping"
     echo "----------------|------------------------|------------------|------------------|----------"
 
@@ -914,7 +1097,7 @@ network_speed(){
 submenu2-3(){
     #安装依赖工具
     if check_cmd "fio" && check_cmd "jq" && check_cmd "bc"; then
-        log_success "fio和jq工具已存在"
+        success "fio和jq工具已存在"
     else
         local -A MY_PKG_MAP=(
             ["fio"]="fio"
@@ -975,7 +1158,7 @@ fio_iops(){
     mkdir -p /mnt/data
     # 定义关联数组：描述 -> 命令
     for cmd in "${!cmds[@]}"; do
-        log_title "进行fio的 $cmd 性能测试，请稍等..."
+        title "进行fio的 $cmd 性能测试，请稍等..."
         echo -n "测试中 ${cmd} ... "
         eval "${cmds[$cmd]}" >/dev/null 2>&1 &
         local cmd_pid=$!   # 如果不在函数内，去掉 local
@@ -999,7 +1182,7 @@ fio_iops(){
                     fio_rw_format "/tmp/fio_rrw_result.json"
             esac
         else
-            log_error "$cmd 失败。"
+            error "$cmd 失败。"
         fi
     done
 }
@@ -1007,7 +1190,7 @@ fio_iops(){
 fio_r_w_format(){
     local JSON_FILE="$1"
     if [ ! -f "$JSON_FILE" ]; then
-        log_error "错误：未找到 JSON 文件 $JSON_FILE"
+        error "错误：未找到 JSON 文件 $JSON_FILE"
         return
     fi
     # 提取关键指标
@@ -1037,7 +1220,7 @@ fio_r_w_format(){
 fio_rw_format(){
     local JSON_FILE="$1"
     if [ ! -f "$JSON_FILE" ]; then
-        log_error "错误：未找到 JSON 文件 $JSON_FILE"
+        error "错误：未找到 JSON 文件 $JSON_FILE"
         return
     fi
 
@@ -1113,7 +1296,7 @@ traditional_drive(){
     # 检查基础命令（增加 parted）
     for cmd in lsblk blkid mount umount mkfs.ext4 parted; do
         if ! command -v "$cmd" &>/dev/null; then
-            log_error "错误：命令 $cmd 未安装。"
+            error "错误：命令 $cmd 未安装。"
             local -A MY_PKG_MAP=(
                 ["$cmd"]="$cmd"
             )
@@ -1127,7 +1310,7 @@ traditional_drive(){
 
     # 如果 lsblk 没有输出，则退出
     if [[ -z "$lsblk_output" ]]; then
-        log_error "无法获取设备信息。"
+        error "无法获取设备信息。"
         go_back
     
     else
@@ -1193,16 +1376,16 @@ traditional_drive(){
 
         # 如果没有未挂载设备，退出
         if [[ ${#unmounted_devices[@]} -eq 0 ]]; then
-            log_error "没有找到未挂载的设备。"
+            error "没有找到未挂载的设备。"
             go_back
         
         else
         # 显示设备列表
             # 显示当前磁盘分区状态（调试信息）
-            log_title "当前磁盘分区状态"
+            title "当前磁盘分区状态"
             sudo lsblk -f
-            log_title ""
-            log_success "找到以下未挂载的设备："
+            title ""
+            success "找到以下未挂载的设备："
             for i in "${!unmounted_devices[@]}"; do
                 IFS='|' read -r name type size fstype label <<< "${unmounted_devices[$i]}"
                 label_info=""
@@ -1214,18 +1397,18 @@ traditional_drive(){
             echo -n "请选择要操作的设备编号 [1-${#unmounted_devices[@]}]: "
             read -r choice
             if [[ ! "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#unmounted_devices[@]} )); then
-                log_error "无效选择，退出。"
+                error "无效选择，退出。"
                 go_back
             fi
 
 
             IFS='|' read -r selected_name selected_type selected_size _ _ <<< "${unmounted_devices[$((choice-1))]}"
             selected_device="/dev/$selected_name"
-            log_success "已选择设备: $selected_device (类型: $selected_type, 大小: $selected_size)"
+            success "已选择设备: $selected_device (类型: $selected_type, 大小: $selected_size)"
 
             # 如果设备是磁盘且无分区，询问是否创建分区表
             if [[ "$selected_type" == "disk" ]]; then
-                log_warning "注意：您选择的是一个完整的磁盘，目前没有分区表。"
+                warn "注意：您选择的是一个完整的磁盘，目前没有分区表。"
                 echo -n "是否要为此磁盘创建分区表并创建分区？(y/n，默认 n): "
                 read -r create_part
                 if [[ "$create_part" == "y" || "$create_part" == "Y" ]]; then
@@ -1254,7 +1437,7 @@ traditional_drive(){
                                 *) size_gb=0;;
                             esac
                             if (( $(echo "$size_gb > 2048" | bc -l 2>/dev/null || echo 0) )); then
-                                log_error "警告：磁盘大小超过2TB，MBR分区表无法支持全部容量。建议使用GPT。"
+                                error "警告：磁盘大小超过2TB，MBR分区表无法支持全部容量。建议使用GPT。"
                                 read -p "是否仍要继续使用MBR？(y/n，默认 n): " force_mbr
                                 if [[ "$force_mbr" != "y" && "$force_mbr" != "Y" ]]; then
                                     continue
@@ -1263,11 +1446,11 @@ traditional_drive(){
                             table_type="msdos"
                             break
                         else
-                            log_error "无效选项，请重新选择。"
+                            error "无效选项，请重新选择。"
                         fi
                     done
 
-                    log_warning "正在为 $selected_device 创建 $table_type 分区表并创建一个分区占满全部空间..."
+                    warn "正在为 $selected_device 创建 $table_type 分区表并创建一个分区占满全部空间..."
                     # 使用 parted 创建分区表并创建分区
                     if sudo parted -s "$selected_device" mklabel "$table_type" && \
                     sudo parted -s "$selected_device" mkpart primary 0% 100%; then
@@ -1279,16 +1462,16 @@ traditional_drive(){
                         partition="${selected_device}1"
                         # 确认分区存在
                         if [[ -b "$partition" ]]; then
-                            log_success "分区创建成功：$partition"
+                            success "分区创建成功：$partition"
                             # 后续将使用分区进行格式化
                             selected_device="$partition"
                             selected_type="part"
                         else
-                            log_error "分区创建失败，请检查。"
+                            error "分区创建失败，请检查。"
                             go_back
                         fi
                     else
-                        log_error "分区表创建失败，请检查。"
+                        error "分区表创建失败，请检查。"
                         go_back
                     fi
                 else
@@ -1303,7 +1486,7 @@ traditional_drive(){
                 # 获取当前文件系统
                 current_fs=$(sudo lsblk -n -o FSTYPE "$selected_device" 2>/dev/null | head -1)
                 if [[ -n "$current_fs" && "$current_fs" != " " ]]; then
-                    log_warning "设备 $selected_device 已有文件系统: $current_fs"
+                    warn "设备 $selected_device 已有文件系统: $current_fs"
                     read -p "是否重新格式化？(y/n): " reformat
                     if [[ "$reformat" != "y" && "$reformat" != "Y" ]]; then
                         echo "跳过格式化。"
@@ -1320,18 +1503,18 @@ traditional_drive(){
                                 2) if command -v mkfs.xfs &>/dev/null; then
                                         fstype="xfs"; mkfs_cmd="mkfs.xfs -f"; break
                                     else
-                                        log_error "未安装 mkfs.xfs，请手动安装 xfsprogs。"
+                                        error "未安装 mkfs.xfs，请手动安装 xfsprogs。"
                                         
                                     fi ;;
                                 3) local -A MY_PKG_MAP=(["btrfs"]="btrfs-progs");check_and_install_tools MY_PKG_MAP "btrfs";fstype="btrfs"; mkfs_cmd="mkfs.btrfs -f"; break;;
-                                *) log_error "无效选项。" ;;
+                                *) error "无效选项。" ;;
                             esac
                         done
-                        log_warning "正在格式化 $selected_device 为 $fstype..."
+                        warn "正在格式化 $selected_device 为 $fstype..."
                         if sudo $mkfs_cmd "$selected_device"; then
-                            log_success "格式化成功。"
+                            success "格式化成功。"
                         else
-                            log_error "格式化失败。"
+                            error "格式化失败。"
                             go_back
                         fi
                     fi
@@ -1348,17 +1531,17 @@ traditional_drive(){
                             2) if command -v mkfs.xfs &>/dev/null; then
                                 fstype="xfs"; mkfs_cmd="mkfs.xfs -f"; break
                             else
-                                log_error "未安装 mkfs.xfs，请手动安装 xfsprogs。"
+                                error "未安装 mkfs.xfs，请手动安装 xfsprogs。"
                             fi ;;
                             3) local -A MY_PKG_MAP=(["btrfs"]="btrfs-progs");check_and_install_tools MY_PKG_MAP "btrfs";fstype="btrfs"; mkfs_cmd="mkfs.btrfs -f"; break ;;
-                            *) log_error "无效选项。";;
+                            *) error "无效选项。";;
                             esac
                         done
-                    log_warning "正在格式化 $selected_device 为 $fstype..."
+                    warn "正在格式化 $selected_device 为 $fstype..."
                     if sudo $mkfs_cmd "$selected_device"; then
-                        log_success "格式化成功。"
+                        success "格式化成功。"
                     else
-                        log_error "格式化失败。"
+                        error "格式化失败。"
                         go_back
                     fi
                 fi
@@ -1367,7 +1550,7 @@ traditional_drive(){
             # 挂载
             read -p "请输入挂载点目录 (例如 /mnt/data): " mount_point
             if [[ -z "$mount_point" ]]; then
-                log_error "挂载点不能为空。"
+                error "挂载点不能为空。"
                 go_back
             fi
             if [[ ! -d "$mount_point" ]]; then
@@ -1384,41 +1567,41 @@ traditional_drive(){
                 1)
                     echo -e "${YELLOW}正在临时挂载 $selected_device 到 $mount_point...${NC}"
                     if sudo mount "$selected_device" "$mount_point"; then
-                        log_success "挂载成功！"
+                        success "挂载成功！"
                         sudo df -h "$mount_point"
                     else
-                        log_error "挂载失败。"
+                        error "挂载失败。"
                         go_back
                     fi
                     ;;
                 2)
                     uuid=$(sudo blkid -s UUID -o value "$selected_device")
                     if [[ -z "$uuid" ]]; then
-                        log_error "无法获取 UUID。"
+                        error "无法获取 UUID。"
                         
                     fi
                     fstype=$(sudo lsblk -n -o FSTYPE "$selected_device" | head -1)
                     if [[ -z "$fstype" ]]; then
-                        log_error "无法获取文件系统类型。"
+                        error "无法获取文件系统类型。"
                         go_back
                     fi
 
                     sudo cp /etc/fstab /etc/fstab.bak
                     sudo echo "UUID=$uuid $mount_point $fstype defaults 0 2" >> /etc/fstab
-                    log_success "已添加条目到 /etc/fstab"
+                    success "已添加条目到 /etc/fstab"
                     if sudo mount "$mount_point"; then
-                        log_success "挂载成功！"
+                        success "挂载成功！"
                         sudo df -h "$mount_point"
-                        log_warning "提示：取消永久挂载前，先删除已添加到 /etc/fsta文件内的条目，在移除硬盘，或者导致系统无法正常开机使用"
+                        warn "提示：取消永久挂载前，先删除已添加到 /etc/fsta文件内的条目，在移除硬盘，或者导致系统无法正常开机使用"
                         go_back
                     else
-                        log_error "挂载失败，已恢复 fstab 备份。"
+                        error "挂载失败，已恢复 fstab 备份。"
                         sudo mv /etc/fstab.bak /etc/fstab
                         go_back
                     fi
                     ;;
                 *)
-                    log_error "无效选项。"
+                    error "无效选项。"
                     go_back
                     ;;
             esac
@@ -1459,13 +1642,13 @@ submenu3-1(){
         choice=$?
         case $choice in
             0) clear; eval 'bash -c "$(curl -sSL https://resource.fit2cloud.com/1panel/package/v2/quick_start.sh)"';go_back ;;
-            1) clear;if check_cmd 1pctl ; then sudo 1pctl restart;else log_error "1panel面板未安装";fi ;go_back ;;
-            2) clear;if check_cmd 1pctl ; then sudo 1pctl stop;else log_error "1panel面板未安装";fi ;go_back ;;
-            3) clear;if check_cmd 1pctl ; then sudo 1pctl status;else log_error "1panel面板未安装";fi ;go_back ;;
-            4) clear;if check_cmd 1pctl ; then sudo 1pctl update port;else log_error "1panel面板未安装";fi ;go_back ;;
-            5) clear;if check_cmd 1pctl ; then sudo 1pctl update password;else log_error "1panel面板未安装";fi ;go_back ;;
-            6) clear;if check_cmd 1pctl ; then sudo 1pctl update username;else log_error "1panel面板未安装";fi ;go_back ;;
-            7) clear;if check_cmd 1pctl ; then sudo 1pctl uninstall;else log_error "1panel面板未安装";fi ;go_back;;
+            1) clear;if check_cmd 1pctl ; then sudo 1pctl restart;else error "1panel面板未安装";fi ;go_back ;;
+            2) clear;if check_cmd 1pctl ; then sudo 1pctl stop;else error "1panel面板未安装";fi ;go_back ;;
+            3) clear;if check_cmd 1pctl ; then sudo 1pctl status;else error "1panel面板未安装";fi ;go_back ;;
+            4) clear;if check_cmd 1pctl ; then sudo 1pctl update port;else error "1panel面板未安装";fi ;go_back ;;
+            5) clear;if check_cmd 1pctl ; then sudo 1pctl update password;else error "1panel面板未安装";fi ;go_back ;;
+            6) clear;if check_cmd 1pctl ; then sudo 1pctl update username;else error "1panel面板未安装";fi ;go_back ;;
+            7) clear;if check_cmd 1pctl ; then sudo 1pctl uninstall;else error "1panel面板未安装";fi ;go_back;;
             8) return ;;
         esac
     done
@@ -1485,13 +1668,13 @@ submenu3-2(){
         choice=$?
         case $choice in
             0) clear; eval "if [ -f /usr/bin/curl ];then curl -sSO https://download.bt.cn/install/install_panel.sh;else wget -O install_panel.sh https://download.bt.cn/install/install_panel.sh;fi;bash install_panel.sh ed8484bec";go_back ;;
-            1) clear;if check_cmd bt ; then sudo bt 1;else log_error "宝塔面板未安装";fi ; go_back ;;
-            2) clear;if check_cmd bt ; then sudo bt 2;else log_error "宝塔面板未安装";fi ; go_back ;;
-            3) clear;if check_cmd bt ; then sudo bt 14;else log_error "宝塔面板未安装";fi ; go_back ;;
-            4) clear;if check_cmd bt ; then sudo bt 8;else log_error "宝塔面板未安装";fi ; go_back ;;
-            5) clear;if check_cmd bt ; then sudo bt 5;else log_error "宝塔面板未安装";fi ; go_back ;;
-            6) clear;if check_cmd bt ; then sudo bt 6;else log_error "宝塔面板未安装";fi ; go_back ;;
-            7) clear;if check_cmd bt ; then sudo wget http://download.bt.cn/install/bt-uninstall.sh;clear;sudo bash bt-uninstall.sh;rm -rf bt-uninstall.sh;else log_error "宝塔面板未安装";fi ; go_back ;;
+            1) clear;if check_cmd bt ; then sudo bt 1;else error "宝塔面板未安装";fi ; go_back ;;
+            2) clear;if check_cmd bt ; then sudo bt 2;else error "宝塔面板未安装";fi ; go_back ;;
+            3) clear;if check_cmd bt ; then sudo bt 14;else error "宝塔面板未安装";fi ; go_back ;;
+            4) clear;if check_cmd bt ; then sudo bt 8;else error "宝塔面板未安装";fi ; go_back ;;
+            5) clear;if check_cmd bt ; then sudo bt 5;else error "宝塔面板未安装";fi ; go_back ;;
+            6) clear;if check_cmd bt ; then sudo bt 6;else error "宝塔面板未安装";fi ; go_back ;;
+            7) clear;if check_cmd bt ; then sudo wget http://download.bt.cn/install/bt-uninstall.sh;clear;sudo bash bt-uninstall.sh;rm -rf bt-uninstall.sh;else error "宝塔面板未安装";fi ; go_back ;;
             8) return ;;
         esac
     done
@@ -1511,13 +1694,13 @@ submenu3-3(){
         choice=$?
         case $choice in
             0) clear; local -A MY_PKG_MAP=(["nginx"]="nginx" ["nginx-common"]="nginx-common" ["nginx-core"]="nginx-core");check_and_install_tools MY_PKG_MAP "nginx" "nginx-common" "nginx-core";go_back  ;;
-            1) clear;if check_cmd nginx ; then log_title "重启nginx服务" ; sudo systemctl restart nginx;else log_error "nginx未安装";fi ; go_back ;;
-            2) clear;if check_cmd nginx ; then log_title "停止nginx服务" ; sudo systemctl stop nginx;if pgrep -f "nginx" ; then sudo nginx -s stop ; fi;else log_error "nginx未安装";fi ; go_back ;;
-            3) clear;if check_cmd nginx ; then log_title "查看nginx服务状态" ; sudo systemctl status nginx;else log_error "nginx未安装";fi ; go_back ;;
-            4) clear;if check_cmd nginx ; then log_title "重载nginx服务配置文件" ; sudo systemctl reload nginx;else log_error "nginx未安装";fi ; go_back ;;
-            5) clear;if check_cmd nginx ; then log_title "设置nginx服务开机自启动" ; sudo systemctl enable nginx;else log_error "nginx未安装";fi ;go_back ;;
-            6) clear;if check_cmd nginx ; then nginx_reverse; else log_error "nginx未安装";fi ;;
-            7) clear;if check_cmd nginx ; then log_title "停止nginx服务";sudo systemctl stop nginx|| true;if pgrep -f "nginx" ; then sudo nginx -s stop ; fi;print_info "卸载nginx";sudo apt purge nginx nginx-common nginx-core -y;print_info "移除nginx依赖";sudo apt autoremove -y; print_info "删除残留的配置和数据";sudo rm -rf /etc/nginx;sudo rm -rf /var/www/html ;else log_error "nginx未安装";fi ; go_back;;
+            1) clear;if check_cmd nginx ; then title "重启nginx服务" ; sudo systemctl restart nginx;else error "nginx未安装";fi ; go_back ;;
+            2) clear;if check_cmd nginx ; then title "停止nginx服务" ; sudo systemctl stop nginx;if pgrep -f "nginx" ; then sudo nginx -s stop ; fi;else error "nginx未安装";fi ; go_back ;;
+            3) clear;if check_cmd nginx ; then title "查看nginx服务状态" ; sudo systemctl status nginx;else error "nginx未安装";fi ; go_back ;;
+            4) clear;if check_cmd nginx ; then title "重载nginx服务配置文件" ; sudo systemctl reload nginx;else error "nginx未安装";fi ; go_back ;;
+            5) clear;if check_cmd nginx ; then title "设置nginx服务开机自启动" ; sudo systemctl enable nginx;else error "nginx未安装";fi ;go_back ;;
+            6) clear;if check_cmd nginx ; then nginx_reverse; else error "nginx未安装";fi ;;
+            7) clear;if check_cmd nginx ; then title "停止nginx服务";sudo systemctl stop nginx|| true;if pgrep -f "nginx" ; then sudo nginx -s stop ; fi;print_info "卸载nginx";sudo apt purge nginx nginx-common nginx-core -y;print_info "移除nginx依赖";sudo apt autoremove -y; print_info "删除残留的配置和数据";sudo rm -rf /etc/nginx;sudo rm -rf /var/www/html ;else error "nginx未安装";fi ; go_back;;
             8) return ;;
         esac
     done
@@ -1584,7 +1767,7 @@ clean_old_config() {
 nginx_reverse_input() {
     # 获取公网 IP 作为默认域名
     local public_ip=$(curl -s --max-time 5 ifconfig.me 2>/dev/null || curl -s --max-time 5 icanhazip.com 2>/dev/null)
-    log_title "设置代理访问的域名或IP"
+    title "设置代理访问的域名或IP"
     read -p "请输入代理访问的 域名 或 IP，回车默认 $public_ip: " SERVER_NAME
     SERVER_NAME=${SERVER_NAME:-$public_ip}
 
@@ -1599,7 +1782,7 @@ nginx_reverse_input() {
             [[ "$REQUEST_PATH" != "/" ]] && REQUEST_PATH=$(echo "$REQUEST_PATH" | sed 's:/*$::')
             break
         else
-            log_error "无效路径，必须以 / 开头且不含空格。"
+            error "无效路径，必须以 / 开头且不含空格。"
         fi
     done
 
@@ -1612,9 +1795,9 @@ nginx_reverse_input() {
         else
             if validate_backend "$backend"; then
                 backends+=("$backend")
-                log_success "已添加：$backend"
+                success "已添加：$backend"
             else
-                log_error "无效格式，请使用 IP:端口 或 域名:端口 格式。"
+                error "无效格式，请使用 IP:端口 或 域名:端口 格式。"
             fi
         fi
     done
@@ -1622,7 +1805,7 @@ nginx_reverse_input() {
     # 获取权重
     weights=()
     for i in "${!backends[@]}"; do
-        log_warning "权重越大，代理访问的优先级越高"
+        warn "权重越大，代理访问的优先级越高"
         read -p "请输入后端 ${backends[$i]} 的权重（回车默认 1）: " weight
         weights+=("${weight:-1}")
     done
@@ -1639,9 +1822,9 @@ nginx_reverse_input() {
         ssl_enabled=true
         # 若监听端口不是 443，提示建议使用 443
         if [[ "$LISTEN_PORT" != "443" ]]; then
-            log_warning "提示：HTTPS 通常使用 443 端口，当前监听端口为 $LISTEN_PORT。"
+            warn "提示：HTTPS 通常使用 443 端口，当前监听端口为 $LISTEN_PORT。"
                 LISTEN_PORT=443
-                log_success "已改为 443 端口。"
+                success "已改为 443 端口。"
             # read -p "是否将监听端口改为 443？(y/n，默认n): " change_port
             # if [[ "$change_port" =~ ^[Yy]$ ]]; then
 
@@ -1658,10 +1841,10 @@ nginx_reverse_input() {
                     CERT_KEY="$SSL_DIR/nginx-selfsigned.key"
                     CERT_CRT="$SSL_DIR/nginx-selfsigned.crt"
                     if [[ -f "$CERT_KEY" || -f "$CERT_CRT" ]]; then
-                        log_warning "证书文件已存在，将覆盖生成。"
+                        warn "证书文件已存在，将覆盖生成。"
                         sudo rm -f "$CERT_KEY" "$CERT_CRT"
                     fi
-                    log_title "生成自签名 SSL 证书（有效期 365 天）..."
+                    title "生成自签名 SSL 证书（有效期 365 天）..."
                     local server_fqdn=$(hostname -f 2>/dev/null || hostname 2>/dev/null || echo "localhost")
                     sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
                         -keyout "$CERT_KEY" \
@@ -1673,20 +1856,20 @@ nginx_reverse_input() {
                     wait $openssl_pid
                     sudo chmod 600 "$CERT_KEY"
                     sudo chmod 644 "$CERT_CRT"
-                    log_success "证书生成完成: $CERT_CRT 和 $CERT_KEY"
+                    success "证书生成完成: $CERT_CRT 和 $CERT_KEY"
                     ssl_cert="$CERT_CRT"
                     ssl_key="$CERT_KEY"
                     break
                     ;;
                 使用已有证书)
-                    log_warning "如果是Cloudflare，选择 源服务器 进行证书申请，加密模式设置为 完全（严格）"
+                    warn "如果是Cloudflare，选择 源服务器 进行证书申请，加密模式设置为 完全（严格）"
                     read -p "请输入证书文件路径（如 /path/to/cert.pem）: " ssl_cert
                     read -p "请输入私钥文件路径（如 /path/to/cert.key）: " ssl_key
                     if [[ -f "$ssl_cert" && -f "$ssl_key" ]]; then
-                        log_success "证书路径有效"
+                        success "证书路径有效"
                         break
                     else
-                        log_error "证书文件或私钥文件不存在，请重新选择。"
+                        error "证书文件或私钥文件不存在，请重新选择。"
                         continue
                     fi
                     ;;
@@ -1733,7 +1916,7 @@ nginx_reverse_output() {
     detect_nginx_vhost_dir
     CONF_FILE="$CONF_DIR/$CONF_BASENAME"
 
-    log_success "生成配置文件：$CONF_FILE"
+    success "生成配置文件：$CONF_FILE"
 
     # 构建 server 块内容
     local server_block=""
@@ -1795,20 +1978,20 @@ nginx_reverse_output() {
     # 启用配置（Debian 风格需创建符号链接）
     if [[ -n "$ENABLED_DIR" ]]; then
         sudo ln -sf "$CONF_FILE" "$ENABLED_DIR/$CONF_BASENAME" 2>/dev/null && \
-            log_success "已创建符号链接：$ENABLED_DIR/$CONF_BASENAME -> $CONF_FILE"
+            success "已创建符号链接：$ENABLED_DIR/$CONF_BASENAME -> $CONF_FILE"
     fi
 
     # 测试 Nginx 配置
-    log_warning "\n测试 Nginx 配置..."
+    warn "\n测试 Nginx 配置..."
     if sudo nginx -t; then
-        log_success "配置测试通过。"
+        success "配置测试通过。"
     else
-        log_error "配置测试失败，请检查配置文件：$CONF_FILE"
+        error "配置测试失败，请检查配置文件：$CONF_FILE"
         return
     fi
 
     # 重载 Nginx
-    log_warning "重载 Nginx 服务..."
+    warn "重载 Nginx 服务..."
     if sudo systemctl is-active nginx &> /dev/null; then
         sudo systemctl reload nginx
     else
@@ -1816,9 +1999,9 @@ nginx_reverse_output() {
     fi
 
     if sudo systemctl status nginx &> /dev/null; then
-        log_success "Nginx 已成功重载，反向代理配置生效。"
+        success "Nginx 已成功重载，反向代理配置生效。"
     else
-        log_error "Nginx 启动失败，请检查日志。"
+        error "Nginx 启动失败，请检查日志。"
         return
     fi
 
@@ -1826,13 +2009,13 @@ nginx_reverse_output() {
 }
 
 del_nginx_reverse(){
-    log_title "自定删除nginx反向代理配置文件"
+    title "自定删除nginx反向代理配置文件"
     #获取配置文件目录
     detect_nginx_vhost_dir
 
     # 确认 CONF_DIR 存在且可读
     if [[ ! -d "$CONF_DIR" ]]; then
-        log_error "错误：配置目录 $CONF_DIR 不存在！"
+        error "错误：配置目录 $CONF_DIR 不存在！"
         exit 1
     fi
 
@@ -1840,11 +2023,11 @@ del_nginx_reverse(){
     mapfile -t conf_files < <(sudo find "$CONF_DIR" -maxdepth 1 -name "*.conf" -type f | sort)
 
     if [[ ${#conf_files[@]} -eq 0 ]]; then
-         log_warning "在 $CONF_DIR 中没有找到任何 .conf 文件。"
+         warn "在 $CONF_DIR 中没有找到任何 .conf 文件。"
         return
     fi
 
-    log_info "找到以下 .conf 配置文件："
+    info "找到以下 .conf 配置文件："
     for i in "${!conf_files[@]}"; do
         echo "  [$((i+1))] ${conf_files[$i]}"
     done
@@ -1865,40 +2048,40 @@ del_nginx_reverse(){
             if [[ "$num" =~ ^[0-9]+$ ]] && (( num >= 1 && num <= ${#conf_files[@]} )); then
                 delete_files+=("${conf_files[$((num-1))]}")
             else
-                log_error "无效编号: $num，已跳过。"
+                error "无效编号: $num，已跳过。"
             fi
         done
     fi
 
     if [[ ${#delete_files[@]} -eq 0 ]]; then
-        log_info "未选择任何有效文件，退出。"
+        info "未选择任何有效文件，退出。"
         return
     fi
 
     # 显示将要删除的文件并二次确认
-    log_warning "即将删除以下文件："
+    warn "即将删除以下文件："
     for file in "${delete_files[@]}"; do
-        log_info "  $file"
+        info "  $file"
     done
 
     read -p "确认删除？(y/N)" confirm
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-        log_info "操作已取消。"
+        info "操作已取消。"
         return
     fi
 
     # 执行删除
     for file in "${delete_files[@]}"; do
         if sudo rm -f "$file"; then
-            log_success "已删除: $file"
+            success "已删除: $file"
             # 如果启用了 sites-enabled 且该文件有对应的符号链接，也尝试删除链接（可选）
             if [[ -n "$ENABLED_DIR" && -L "$ENABLED_DIR/$(basename "$file")" ]]; then
                 sudo rm -f "$ENABLED_DIR/$(basename "$file")"
-                log_info "已移除符号链接: $ENABLED_DIR/$(basename "$file")"
+                info "已移除符号链接: $ENABLED_DIR/$(basename "$file")"
                 sudo nginx -s reload
             fi
         else
-            log_error "删除失败: $file"
+            error "删除失败: $file"
         fi
     done
 
@@ -1915,12 +2098,12 @@ more_nginx_reverse(){
                     break
                     ;;
                 [nN])
-                    log_info "退出添加。"
+                    info "退出添加。"
                     # 用户选择退出，跳出内循环并终止外循环
                     break 2
                     ;;
                 *)
-                    log_error "无效输入，请输入 y 或 n。"
+                    error "无效输入，请输入 y 或 n。"
                     ;;
             esac
         done
@@ -1962,9 +2145,9 @@ prometheus_panel(){
         choice=$?
         case $choice in
             0) clear;prometheus_install_docker;go_back;;
-            1) clear;if sudo docker ps -a --format '{{.Names}}' | grep -qx 'prometheus'; then prometheus_uninstall_docker;else log_warning "prometheus未安装运行" ;fi ;go_back ;;
+            1) clear;if sudo docker ps -a --format '{{.Names}}' | grep -qx 'prometheus'; then prometheus_uninstall_docker;else warn "prometheus未安装运行" ;fi ;go_back ;;
             2) clear;node_exporter_install;go_back ;;
-            3) clear;if [ -f /usr/local/bin/node_exporter ];then node_exporter_uninstall;else log_warning "node_exporter未安装运行";fi ;go_back ;;
+            3) clear;if [ -f /usr/local/bin/node_exporter ];then node_exporter_uninstall;else warn "node_exporter未安装运行";fi ;go_back ;;
             4) return ;;
         esac
     done
@@ -1980,9 +2163,9 @@ prometheus_install_docker(){
         BASE_DIR="/tmp/prometheus-stack"
         mkdir -p "$BASE_DIR"/{prometheus,rules,alertmanager,blackbox,grafana}
         mkdir -p "$BASE_DIR/prometheus/targets"
-        log_success "工作目录: $BASE_DIR"
+        success "工作目录: $BASE_DIR"
 
-        log_title "生成配置文件.."
+        title "生成配置文件.."
         cat > "$BASE_DIR/prometheus/prometheus.yml" << 'EOF'
 global:
   scrape_interval: 15s
@@ -2066,35 +2249,35 @@ modules:
   icmp:
     prober: icmp
 EOF
-        log_success "配置文件生成成功"
-        log_title "创建 Docker 网络"
+        success "配置文件生成成功"
+        title "创建 Docker 网络"
         if ! sudo docker network ls --format '{{.Name}}' | grep -q "^${NETWORK_NAME}$"; then
-            log_success "创建 Docker 网络: $NETWORK_NAME"
+            success "创建 Docker 网络: $NETWORK_NAME"
             sudo docker network create "$NETWORK_NAME"
         else
-            log_warning "Docker 网络已存在: $NETWORK_NAME"
+            warn "Docker 网络已存在: $NETWORK_NAME"
         fi
-        log_title "停止并移除已存在的同名容器（避免冲突）"
+        title "停止并移除已存在的同名容器（避免冲突）"
         containers=("prometheus" "alertmanager" "node-exporter" "blackbox-exporter" "grafana")
         for c in "${containers[@]}"; do
             if sudo docker ps -a --format '{{.Names}}' | grep -q "^${c}$"; then
-                log_success "停止并移除旧容器: $c"
+                success "停止并移除旧容器: $c"
                 sudo docker stop "$c" >/dev/null 2>&1 || true
                 sudo docker rm "$c" >/dev/null 2>&1 || true
             fi
         done
 
-        log_title " 创建 Docker 卷（用于持久化数据）"
+        title " 创建 Docker 卷（用于持久化数据）"
         volumes=("prometheus-data" "alertmanager-data" "grafana-data")
         for v in "${volumes[@]}"; do
             if ! sudo docker volume ls --format '{{.Name}}' | grep -q "^${v}$"; then
-                log_success "创建 Docker 卷: $v${NC}"
+                success "创建 Docker 卷: $v${NC}"
                 sudo docker volume create "$v" >/dev/null
             else
-                log_warning "Docker 卷已存在: $v"
+                warn "Docker 卷已存在: $v"
             fi
         done
-        log_title "启动 Prometheus 容器..."
+        title "启动 Prometheus 容器..."
         docker run -d \
         --name prometheus \
         --restart unless-stopped \
@@ -2110,7 +2293,7 @@ EOF
         --storage.tsdb.retention.time=15d \
         --web.enable-lifecycle
 
-        log_title "启动 Alertmanager 容器..."
+        title "启动 Alertmanager 容器..."
         docker run -d \
         --name alertmanager \
         --restart unless-stopped \
@@ -2120,7 +2303,7 @@ EOF
         prom/alertmanager:latest \
         --config.file=/etc/alertmanager/alertmanager.yml
 
-        log_title "启动 Node Exporter 容器..."
+        title "启动 Node Exporter 容器..."
         docker run -d \
         --name node-exporter \
         --restart unless-stopped \
@@ -2135,7 +2318,7 @@ EOF
         --path.rootfs=/rootfs \
         --collector.filesystem.mount-points-exclude="^/(sys|proc|dev|host|etc)($$|/)"
 
-        log_title "启动 Blackbox Exporter 容器..."
+        title "启动 Blackbox Exporter 容器..."
         docker run -d \
         --name blackbox-exporter \
         --restart unless-stopped \
@@ -2144,7 +2327,7 @@ EOF
         prom/blackbox-exporter:latest \
         --config.file=/etc/blackbox_exporter/config.yml
 
-        log_title "启动 Grafana 容器..."
+        title "启动 Grafana 容器..."
         docker run -d \
         --name grafana \
         --restart unless-stopped \
@@ -2156,22 +2339,22 @@ EOF
         grafana/grafana-oss:latest
 
         
-        log_title "Docker 部署完成！"
-        log_success "Prometheus UI:      http://prometheus:9090(内部访问)"
-        log_success "Alertmanager UI:    http://alertmanager:9093(内部访问)"
-        log_success "Node Exporter:      http://node-exporter:9100(内部访问)"
-        log_success "Blackbox Exporter:  http://blackbox-exporter:9115(内部访问)"
-        log_success "Grafana:            http://$(get_public_ip):3000 (admin/admin)"
-        log_success "工作目录: ${YELLOW}$BASE_DIR${NC}"
-        log_success "配置文件可直接修改，修改后执行以下命令热加载 Prometheus 配置（无需重启）:"
-        log_warning "curl -X POST http://localhost:9090/-/reload"
-        log_warning ""
-        log_warning "查看容器状态: docker ps | grep -E 'prometheus|alertmanager|node-exporter|blackbox|grafana'"
-        log_warning "查看日志: docker logs -f <容器名>"
-        log_warning "为了安全，可以使用 宿主机防火墙 和 反向代理 等技术层面来限制 IP 访问。"
+        title "Docker 部署完成！"
+        success "Prometheus UI:      http://prometheus:9090(内部访问)"
+        success "Alertmanager UI:    http://alertmanager:9093(内部访问)"
+        success "Node Exporter:      http://node-exporter:9100(内部访问)"
+        success "Blackbox Exporter:  http://blackbox-exporter:9115(内部访问)"
+        success "Grafana:            http://$(get_public_ip):3000 (admin/admin)"
+        success "工作目录: ${YELLOW}$BASE_DIR${NC}"
+        success "配置文件可直接修改，修改后执行以下命令热加载 Prometheus 配置（无需重启）:"
+        warn "curl -X POST http://localhost:9090/-/reload"
+        warn ""
+        warn "查看容器状态: docker ps | grep -E 'prometheus|alertmanager|node-exporter|blackbox|grafana'"
+        warn "查看日志: docker logs -f <容器名>"
+        warn "为了安全，可以使用 宿主机防火墙 和 反向代理 等技术层面来限制 IP 访问。"
 
     else
-        log_error "Docker安装失败。"
+        error "Docker安装失败。"
         
     fi
 }
@@ -2185,62 +2368,62 @@ prometheus_uninstall_docker(){
         VOLUMES=("prometheus-data" "alertmanager-data" "grafana-data")
         DEFAULT_BASE_DIR="/tmp/prometheus-stack"
 
-        log_title "停止并删除容器..."
+        title "停止并删除容器..."
         for c in "${CONTAINERS[@]}"; do
             if sudo docker ps -a --format '{{.Names}}' | grep -q "^${c}$"; then
-                log_success "删除容器: $c"
+                success "删除容器: $c"
                 sudo docker stop "$c" >/dev/null 2>&1 || true
                 sudo docker rm "$c" >/dev/null 2>&1 || true
             else
-                log_warning "容器不存在: $c"
+                warn "容器不存在: $c"
             fi
         done
 
-        log_title "删除网络: $NETWORK_NAME"
+        title "删除网络: $NETWORK_NAME"
         if sudo docker network ls --format '{{.Name}}' | grep -q "^${NETWORK_NAME}$"; then
             # 检查是否有容器仍在使用该网络）
-            sudo docker network rm "$NETWORK_NAME" >/dev/null 2>&1 && log_success "网络已删除" ||  log_error "无法删除网络，可能仍有容器连接或需手动删除"
+            sudo docker network rm "$NETWORK_NAME" >/dev/null 2>&1 && success "网络已删除" ||  error "无法删除网络，可能仍有容器连接或需手动删除"
         else
-            log_warning "网络不存在: $NETWORK_NAME"
+            warn "网络不存在: $NETWORK_NAME"
         fi
 
-        log_title "删除 Docker 数据卷...${NC}"
+        title "删除 Docker 数据卷...${NC}"
         for v in "${VOLUMES[@]}"; do
             if sudo docker volume ls --format '{{.Name}}' | grep -q "^${v}$"; then
-                log_success "删除卷: $v"
-                sudo docker volume rm "$v" >/dev/null 2>&1 && log_success "已删除" || log_error "删除卷 $v 失败，可能仍有容器引用"
+                success "删除卷: $v"
+                sudo docker volume rm "$v" >/dev/null 2>&1 && success "已删除" || error "删除卷 $v 失败，可能仍有容器引用"
             else
-                log_warning "卷不存在: $v"
+                warn "卷不存在: $v"
             fi
         done
 
-        log_title "删除生成的配置文件目录"
+        title "删除生成的配置文件目录"
         if [ -d "$BASE_DIR" ]; then
-            log_warning "删除配置目录: $BASE_DIR"
+            warn "删除配置目录: $BASE_DIR"
             sudo rm -rf "$BASE_DIR"
-            log_success "目录已删除"
+            success "目录已删除"
         else
-            log_warning "配置目录不存在: $BASE_DIR"
+            warn "配置目录不存在: $BASE_DIR"
         fi
 
-        log_success "✅ 卸载完成！"
+        success "✅ 卸载完成！"
 
 
 
     else
-        log_error "Docker安装失败。"
+        error "Docker安装失败。"
         
     fi
 }
 
 node_exporter_install(){
 
-    log_warning "打开浏览器访问https://github.com/prometheus/node_exporter/releases/"
+    warn "打开浏览器访问https://github.com/prometheus/node_exporter/releases/"
     # 输入下载链接
     while true; do
         read -p "请输入 Node Exporter 文件的下载链接: " NODE_URL
         if [ -z "$NODE_URL" ]; then
-            log_warning "错误：未提供下载链接"
+            warn "错误：未提供下载链接"
             continue
         fi
         break
@@ -2252,24 +2435,24 @@ node_exporter_install(){
     curl -L -o node_exporter.tar.gz "$NODE_URL"
 
     # 解压文件
-    log_success "正在解压..."
+    success "正在解压..."
     tar xzf node_exporter.tar.gz
 
     # 查找 node_exporter 二进制文件（可能位于子目录中）
     BIN_PATH=$(sudo find . -name "node_exporter" -type f -executable | head -n 1)
     if [ -z "$BIN_PATH" ]; then
-        log_error "错误：解压后未找到 node_exporter 二进制文件"
+        error "错误：解压后未找到 node_exporter 二进制文件"
         return
     fi
 
     # 移动二进制文件到系统路径
-    log_success "安装二进制文件到 /usr/local/bin ..."
+    success "安装二进制文件到 /usr/local/bin ..."
     sudo cp "$BIN_PATH" /usr/local/bin/node_exporter
     sudo chmod +x /usr/local/bin/node_exporter
 
     # 创建 systemd 服务文件
     SERVICE_FILE="/etc/systemd/system/node_exporter.service"
-    log_success "创建 systemd 服务: $SERVICE_FILE"
+    success "创建 systemd 服务: $SERVICE_FILE"
     sudo cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=Node Exporter
@@ -2287,7 +2470,7 @@ WantedBy=multi-user.target
 EOF
 
     # 重新加载 systemd，启用并启动服务
-    log_success "配置 systemd 服务..."
+    success "配置 systemd 服务..."
     sudo systemctl daemon-reload
     sudo systemctl enable node_exporter
     sudo systemctl start node_exporter
@@ -2297,14 +2480,14 @@ EOF
     cd /
     sudo rm -rf "$TEMP_DIR"
 
-    log_success "Node Exporter 安装完成并已启动。"
+    success "Node Exporter 安装完成并已启动。"
     sudo systemctl status node_exporter --no-pager
 
 
 }
 
 node_exporter_uninstall(){
-    log_title "卸载 Node Exporter"
+    title "卸载 Node Exporter"
     echo "  - 停止并禁用 node_exporter 服务"
     echo "  - 删除 systemd 服务文件"
     echo "  - 删除 /usr/local/bin/node_exporter 二进制文件"
@@ -2320,33 +2503,33 @@ node_exporter_uninstall(){
     SERVICE_FILE="/etc/systemd/system/node_exporter.service"
 
     # 停止并禁用服务（如果存在）
-    log_success "停止 ${SERVICE_NAME} 服务..."
-    log_success systemctl stop node_exporter
-    log_success "禁用开机自启..."
+    success "停止 ${SERVICE_NAME} 服务..."
+    success systemctl stop node_exporter
+    success "禁用开机自启..."
     sudo systemctl disable node_exporter
 
     # 删除 systemd 服务文件
     if [ -f "$SERVICE_FILE" ]; then
-        log_success "删除服务文件: $SERVICE_FILE"
+        success "删除服务文件: $SERVICE_FILE"
         sudo rm -f "$SERVICE_FILE"
     else
-        log_warning "服务文件 $SERVICE_FILE 不存在，跳过。"
+        warn "服务文件 $SERVICE_FILE 不存在，跳过。"
     fi
 
     # 重新加载 systemd
-    log_success "重新加载 systemd 配置..."
+    success "重新加载 systemd 配置..."
     sudo systemctl daemon-reload
 
     # 删除二进制文件
     BIN_PATH="/usr/local/bin/node_exporter"
     if [ -f "$BIN_PATH" ]; then
-        log_success "删除二进制文件: $BIN_PATH"
+        success "删除二进制文件: $BIN_PATH"
         sudo rm -f "$BIN_PATH"
     else
-        log_warning "二进制文件 $BIN_PATH 不存在，跳过。"
+        warn "二进制文件 $BIN_PATH 不存在，跳过。"
     fi
 
-    log_success "Node Exporter 卸载完成。"
+    success "Node Exporter 卸载完成。"
 }
 
 
@@ -2366,7 +2549,7 @@ neza_panel(){
         case $choice in
             0) clear;sudo mkdir -p /tmp/nezha/;sudo curl -L https://raw.githubusercontent.com/nezhahq/scripts/refs/heads/main/install.sh -o /tmp/nezha/nezha.sh && chmod +x /tmp/nezha/nezha.sh && sudo /tmp/nezha/nezha.sh;go_back;;
             1) clear;sudo mkdir -p /tmp/nezha/;sudo curl -L https://gitee.com/naibahq/scripts/raw/main/install.sh -o /tmp/nezha/nezha.sh && chmod +x /tmp/nezha/nezha.sh && sudo CN=true /tmp/nezha/nezha.sh;go_back ;;
-            2) clear;if check_service "nezha-agent";then sudo mkdir -p /tmp/nezha/;sudo curl -L https://raw.githubusercontent.com/nezhahq/scripts/main/agent/install.sh -o /tmp/nezha/agent.sh && sudo chmod +x /tmp/nezha/agent.sh && sudo bash /tmp/nezha/agent.sh uninstall;sudo rm -rf /tmp/nezha/agent.sh; else log_error "哪吒Agent未安装";fi ;go_back ;;
+            2) clear;if check_service "nezha-agent";then sudo mkdir -p /tmp/nezha/;sudo curl -L https://raw.githubusercontent.com/nezhahq/scripts/main/agent/install.sh -o /tmp/nezha/agent.sh && sudo chmod +x /tmp/nezha/agent.sh && sudo bash /tmp/nezha/agent.sh uninstall;sudo rm -rf /tmp/nezha/agent.sh; else error "哪吒Agent未安装";fi ;go_back ;;
             3) return ;;
         esac
     done
@@ -2386,9 +2569,9 @@ Komari_panel(){
         choice=$?
         case $choice in
             0) clear;Komari_install_docker;go_back ;;
-            1) clear;if sudo docker ps -a --format '{{.Names}}' | grep -qx 'komari'; then sudo docker stop komari;sudo docker rm komari;sudo rm -rf /tmp/komari/data;log_success "删除komari容器成功";else log_warning "komari未安装运行" ;fi ;go_back;;
+            1) clear;if sudo docker ps -a --format '{{.Names}}' | grep -qx 'komari'; then sudo docker stop komari;sudo docker rm komari;sudo rm -rf /tmp/komari/data;success "删除komari容器成功";else warn "komari未安装运行" ;fi ;go_back;;
             2) clear;curl -fsSL https://raw.githubusercontent.com/komari-monitor/komari/main/install-komari.sh -o install-komari.sh;chmod +x install-komari.sh;sudo ./install-komari.sh;go_back ;;
-            3) clear; check_service "komari-agent"; if [[ $? -ne 2 ]]; then sudo systemctl stop komari-agent; sudo systemctl disable komari-agent; sudo rm /etc/systemd/system/komari-agent.service; sudo systemctl daemon-reload; sudo rm -rf /opt/komari; else log_warning "komari-agent未安装运行"; fi; go_back;;
+            3) clear; check_service "komari-agent"; if [[ $? -ne 2 ]]; then sudo systemctl stop komari-agent; sudo systemctl disable komari-agent; sudo rm /etc/systemd/system/komari-agent.service; sudo systemctl daemon-reload; sudo rm -rf /opt/komari; else warn "komari-agent未安装运行"; fi; go_back;;
             4) return;;
         esac
     done
@@ -2400,7 +2583,7 @@ Komari_install_docker(){
     docker_install_sh
     if [ $? -eq 0 ]; then
         # 获取监听端口
-        log_title "进行Komari面板安装（docker)"
+        title "进行Komari面板安装（docker)"
         validate_port "25774"
         sudo mkdir -p "/tmp/komari/data"
         sudo docker run -d \
@@ -2410,12 +2593,12 @@ Komari_install_docker(){
         --restart=always \
         ghcr.io/komari-monitor/komari:latest
         
-        log_success   "启动komari容器成功"
-        log_title "komari面板访问信息"
-        log_success "打开网址http://$(get_public_ip):$LISTEN_PORT 并登录控制面板。登录凭据如下："
+        success   "启动komari容器成功"
+        title "komari面板访问信息"
+        success "打开网址http://$(get_public_ip):$LISTEN_PORT 并登录控制面板。登录凭据如下："
         sudo docker logs komari 2>&1 | grep "Default admin account created" | sed -n 's/.*Username: \(.*\) , Password: \(.*\)/Username: \1\nPassword: \2/p'
     else
-        log_error "Docker安装失败。"
+        error "Docker安装失败。"
         
     fi
 }
@@ -2434,17 +2617,17 @@ Beszel_panel(){
 
         case $choice in
             0) clear;Beszel_install_docker;go_back ;;
-            1) clear;if sudo docker ps -a --format '{{.Names}}' | grep -qx 'beszel'; then sudo docker stop beszel;sudo docker rm beszel;sudo rm -rf /tmp/beszel/beszel_data;log_success "删除Beszel容器成功";else log_warning "Beszel未安装运行" ;fi ;go_back;;
+            1) clear;if sudo docker ps -a --format '{{.Names}}' | grep -qx 'beszel'; then sudo docker stop beszel;sudo docker rm beszel;sudo rm -rf /tmp/beszel/beszel_data;success "删除Beszel容器成功";else warn "Beszel未安装运行" ;fi ;go_back;;
             2) clear;Beszel_install_sh;go_back ;;
-            3) clear;check_service "beszel-hub"; if [[ $? -ne 2 ]]; then sudo mkdir -p /tmp/Beszel/;sudo curl -sL https://get.beszel.dev/hub -o "/tmp/Beszel/install-hub.sh" && chmod +x "/tmp/Beszel/install-hub.sh" &&sudo bash "/tmp/Beszel/install-hub.sh" -u;log_success "删除Beszel成功"; else log_warning "Beszel未安装运行"; fi; go_back;;
-            4) clear; check_service "beszel-agent"; if [[ $? -ne 2 ]]; then sudo systemctl stop beszel-agent; sudo systemctl disable beszel-agent; sudo rm /etc/systemd/system/beszel-agent.service; sudo systemctl daemon-reload; sudo rm -rf /tmp/install-agent.sh; else log_warning "komari-agent未安装运行"; fi; go_back;;
+            3) clear;check_service "beszel-hub"; if [[ $? -ne 2 ]]; then sudo mkdir -p /tmp/Beszel/;sudo curl -sL https://get.beszel.dev/hub -o "/tmp/Beszel/install-hub.sh" && chmod +x "/tmp/Beszel/install-hub.sh" &&sudo bash "/tmp/Beszel/install-hub.sh" -u;success "删除Beszel成功"; else warn "Beszel未安装运行"; fi; go_back;;
+            4) clear; check_service "beszel-agent"; if [[ $? -ne 2 ]]; then sudo systemctl stop beszel-agent; sudo systemctl disable beszel-agent; sudo rm /etc/systemd/system/beszel-agent.service; sudo systemctl daemon-reload; sudo rm -rf /tmp/install-agent.sh; else warn "komari-agent未安装运行"; fi; go_back;;
             5) return ;;
         esac
     done
 }
 
 Beszel_install_sh(){
-    log_title "Beszel面板(安装一键脚本)"
+    title "Beszel面板(安装一键脚本)"
     validate_port "8090"
     read -p "是否启用每日自动更新？(y/n，默认n): " auto_update
     if [[ "$change_port" =~ ^[Yy]$ ]]; then
@@ -2453,14 +2636,14 @@ Beszel_install_sh(){
         sudo mkdir -p /tmp/Beszel/;sudo curl -sL https://get.beszel.dev/hub -o /tmp/Beszel/install-hub.sh && chmod +x /tmp/Beszel/install-hub.sh && sudo bash /tmp/Beszel/install-hub.sh -p $LISTEN_PORT
     fi
     
-    log_title "Beszel面板访问信息"
-    log_success "打开网址http://$(get_public_ip):$LISTEN_PORT 进行登录凭据的创建。"
-    log_warning "卸载agent面板，在安装agent的参数后面加入-u的参数进行卸载。"
+    title "Beszel面板访问信息"
+    success "打开网址http://$(get_public_ip):$LISTEN_PORT 进行登录凭据的创建。"
+    warn "卸载agent面板，在安装agent的参数后面加入-u的参数进行卸载。"
 }
 Beszel_install_docker(){
     docker_install_sh
     if [ $? -eq 0 ]; then
-        log_title "进行Beszel面板安装（docker)"
+        title "进行Beszel面板安装（docker)"
         
         validate_port "8090"
         sudo mkdir -p "/tmp/beszel/beszel_data"
@@ -2472,11 +2655,11 @@ Beszel_install_docker(){
         -p $LISTEN_PORT:8090 \
         henrygd/beszel
         
-        log_success   "启动Beszel容器成功"
-        log_title "Beszel面板访问信息"
-        log_success "打开网址http://$(get_public_ip):$LISTEN_PORT 进行登录凭据的创建。"
+        success   "启动Beszel容器成功"
+        title "Beszel面板访问信息"
+        success "打开网址http://$(get_public_ip):$LISTEN_PORT 进行登录凭据的创建。"
     else
-        log_error "Docker安装失败,请手动安装"
+        error "Docker安装失败,请手动安装"
         
     fi
 }
@@ -2512,9 +2695,9 @@ submenu5() {
         choice=$?
         case $choice in
             0) clear;3xui_docker_install;go_back;;
-            1) clear;if sudo docker ps -a --format '{{.Names}}' | grep -qx '3xui_app'; then sudo docker compose -f "/tmp/panel/3xui_compose.yml" down;sudo docker system prune -a;sudo rm -rf "/tmp/panel";log_success "删除3x-ui容器成功";else log_warning "3x-ui未安装运行" ;fi ;go_back;;
+            1) clear;if sudo docker ps -a --format '{{.Names}}' | grep -qx '3xui_app'; then sudo docker compose -f "/tmp/panel/3xui_compose.yml" down;sudo docker system prune -a;sudo rm -rf "/tmp/panel";success "删除3x-ui容器成功";else warn "3x-ui未安装运行" ;fi ;go_back;;
             2) clear;curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh | sudo bash ;go_back;;
-            3) clear;check_service "x-ui" ; if [[ $? -ne 2 ]]; then sudo x-ui uninstall ; else log_warning "3x-ui未安装运行"; fi; go_back;;
+            3) clear;check_service "x-ui" ; if [[ $? -ne 2 ]]; then sudo x-ui uninstall ; else warn "3x-ui未安装运行"; fi; go_back;;
             4) return ;;
         esac
     done
@@ -2540,17 +2723,17 @@ services:
     network_mode: host
     restart: unless-stopped
 EOF
-        log_success "创建docker_compose文件完成"
+        success "创建docker_compose文件完成"
         sudo docker compose -f "/tmp/panel/3xui_compose.yml" up -d
         get_public_ip
-        log_success   "启动容器成功"
-        log_title "3xui面板访问信息"
-        log_success "打开网址http://$(get_public_ip):2053并登录控制面板。登录凭据如下："
-        log_success "👤 用户名：admin"
-        log_success "🔑 密码：admin"
-        log_warning "登录后，立即在面板设置中更改管理员凭据（Panel Settings > Authentication）"
+        success   "启动容器成功"
+        title "3xui面板访问信息"
+        success "打开网址http://$(get_public_ip):2053并登录控制面板。登录凭据如下："
+        success "👤 用户名：admin"
+        success "🔑 密码：admin"
+        warn "登录后，立即在面板设置中更改管理员凭据（Panel Settings > Authentication）"
     else
-        log_error "Docker安装失败。"
+        error "Docker安装失败。"
         
     fi
 
@@ -2568,9 +2751,9 @@ wireguard_panel(){
         choice=$?
         case $choice in
             0) clear;wireguard_docker_install;go_back;;
-            1) clear;if sudo docker ps -a --format '{{.Names}}' | grep -qx 'wg-easy'; then sudo docker compose -f "/tmp/wg-easy/docker-compose.yml" down;sudo docker system prune -a;sudo rm -rf "/tmp/wg-easy";log_success "删除wg-easy容器成功";else log_warning "wg-easy未安装运行" ;fi ;go_back;;
+            1) clear;if sudo docker ps -a --format '{{.Names}}' | grep -qx 'wg-easy'; then sudo docker compose -f "/tmp/wg-easy/docker-compose.yml" down;sudo docker system prune -a;sudo rm -rf "/tmp/wg-easy";success "删除wg-easy容器成功";else warn "wg-easy未安装运行" ;fi ;go_back;;
             2) clear;wireguard_install;go_back;;
-            3) clear;check_service "wg-quick@" ; if [[ $? -ne 2 ]]; then wireguard_uninstall ; else log_warning "wireguard未安装运行"; fi ; go_back;;
+            3) clear;check_service "wg-quick@" ; if [[ $? -ne 2 ]]; then wireguard_uninstall ; else warn "wireguard未安装运行"; fi ; go_back;;
             4) return ;;
         esac
     done
@@ -2581,12 +2764,12 @@ wireguard_docker_install(){
     if [ $? -eq 0 ]; then
         sudo mkdir -p "/tmp/wg-easy"
         sudo curl -o "/tmp/wg-easy/docker-compose.yml" https://raw.githubusercontent.com/wg-easy/wg-easy/master/docker-compose.yml
-        log_success "docker_compose文件下载完成"
+        success "docker_compose文件下载完成"
         sudo docker compose -f "/tmp/wg-easy/docker-compose.yml" up -d
-        log_success   "启动容器成功"
-        log_title "wireguard的WebUI面板访问信息"
-        log_success "打开网址http://$(get_public_ip):51821并登录控制面板。"
-        log_warning "需要设置Nginx的反向代理设置HTTPS才能访问登录"
+        success   "启动容器成功"
+        title "wireguard的WebUI面板访问信息"
+        success "打开网址http://$(get_public_ip):51821并登录控制面板。"
+        warn "需要设置Nginx的反向代理设置HTTPS才能访问登录"
 
     else
         echo -e "${RED}Docker安装失败。${NC}"
@@ -2598,7 +2781,7 @@ get_default_interface() {
     local iface
     iface=$(sudo ip route show default | awk '/default/ {print $5; exit}')
     if [[ -z "$iface" ]]; then
-        log_error "无法获取默认路由的外网接口，请手动设置 PostUp/PostDown 中的接口名称。"
+        error "无法获取默认路由的外网接口，请手动设置 PostUp/PostDown 中的接口名称。"
     fi
     echo "$iface"
 }
@@ -2622,7 +2805,7 @@ EOF
 
     # 动态添加到当前运行的 WireGuard 接口
     sudo wg set wg0 peer "$clean_pubkey" allowed-ips "$client_ip/32"
-    log_success "客户端 $client_index 已添加到服务器配置，IP: $client_ip"
+    success "客户端 $client_index 已添加到服务器配置，IP: $client_ip"
 }
 # 生成服务器基础配置并返回公钥（不包含 Peer）
 generate_server_base_config() {
@@ -2651,8 +2834,8 @@ EOF
     sudo echo "$server_private_key" > /etc/wireguard/server_private.key
     sudo chmod 600 /etc/wireguard/*.key
 
-    log_success "服务器配置文件已生成: $config_file"
-    log_success "服务器公钥: $server_public_key"
+    success "服务器配置文件已生成: $config_file"
+    success "服务器公钥: $server_public_key"
 
     # 只输出公钥到 stdout（无换行符）
     printf "%s" "$server_public_key" | tr -d '\n'
@@ -2660,13 +2843,13 @@ EOF
 # 启动 WireGuard 接口（如果已存在则先关闭）
 start_wireguard() {
     if sudo wg show wg0 &>/dev/null; then
-        log_warning "WireGuard 接口 wg0 已存在，正在关闭..."
+        warn "WireGuard 接口 wg0 已存在，正在关闭..."
         sudo wg-quick down wg0 || true
     fi
-    log_info "正在启动 WireGuard 接口..."
-    sudo wg-quick up wg0 || log_error "启动 wg0 失败，请检查配置。"
+    info "正在启动 WireGuard 接口..."
+    sudo wg-quick up wg0 || error "启动 wg0 失败，请检查配置。"
     sudo systemctl enable wg-quick@wg0 2>/dev/null || true
-    log_success "WireGuard 接口已启动。"
+    success "WireGuard 接口已启动。"
 }
 # 生成客户端配置（包含二维码），并返回客户端公钥
 generate_client_config() {
@@ -2697,13 +2880,13 @@ Endpoint = $server_endpoint:$server_port
 AllowedIPs = 0.0.0.0/0
 EOF
 
-    log_success "客户端 $client_index 配置已生成: $config_file"
+    success "客户端 $client_index 配置已生成: $config_file"
 
     if command -v qrencode &>/dev/null; then
-        log_success "客户端 $client_index 二维码已生成\n"
+        success "客户端 $client_index 二维码已生成\n"
         qrencode -t ansiutf8 < "$config_file" >&2
     else
-        log_warning "未找到 qrencode，跳过二维码生成。"
+        warn "未找到 qrencode，跳过二维码生成。"
     fi
 
     # 返回客户端公钥（无换行）
@@ -2727,11 +2910,12 @@ submenu6() {
 
 submenu6-2(){
     while true; do
-        select_menu "网站防御" "Cloudflare + Nginx + fail2ban防御" "返回上级菜单"
+        select_menu "网站防御" "Cloudflare + Nginx + fail2ban  静态IP封禁(外防御)" "Cloudflare + Nginx + Lua + Redis 动态IP封禁(内防御)" "返回上级菜单"
         choice=$?
         case $choice in
             0) clear;cf_fail2ban_panel;;
-            1) return ;;
+            1) clear;cf_lua_redis_panel;;
+            2) return ;;
         esac
     done
 }
@@ -2749,18 +2933,17 @@ cf_fail2ban_panel(){
         choice=$?
         case $choice in
             0) clear;cf_fail2ban_install;go_back;;
-            1) clear;if check_cmd "fail2ban-client"; then  log_title "查看特定监狱的封禁状态"; sudo fail2ban-client status nginx-limit  ;else log_warning "fail2ban未安装运行" ;fi ;go_back;;
-            2) clear;if check_cmd "fail2ban-client"; then unblock_ip ;else log_warning "fail2ban未安装运行" ;fi ;go_back;;
-            3) clear;if check_cmd "fail2ban-client"; then cf_fail2ban_uninstall ;else log_warning "fail2ban未安装运行" ;fi ;go_back;;
+            1) clear;if check_cmd "fail2ban-client"; then  title "查看特定监狱的封禁状态"; sudo fail2ban-client status nginx-limit  ;else warn "fail2ban未安装运行" ;fi ;go_back;;
+            2) clear;if check_cmd "fail2ban-client"; then unblock_ip ;else warn "fail2ban未安装运行" ;fi ;go_back;;
+            3) clear;if check_cmd "fail2ban-client"; then cf_fail2ban_uninstall ;else warn "fail2ban未安装运行" ;fi ;go_back;;
             4) return ;;
         esac
     done
 }
 
 cf_fail2ban_install(){
-    local 
     if check_cmd "nginx" && check_cmd "fail2ban" && check_cmd "jq" && check_cmd "curl"  ; then
-        log_success "所需的依赖工具已存在"
+        success "所需的依赖工具已存在"
     else
         local -A MY_PKG_MAP=(
             ["nginx"]="nginx"
@@ -2771,17 +2954,17 @@ cf_fail2ban_install(){
         check_and_install_tools MY_PKG_MAP "nginx" "fail2ban-client" "jq" "curl"
     fi
     
-    log_info "正在获取 Cloudflare IP 列表..."
+    info "正在获取 Cloudflare IP 列表..."
     CF_IPV4=$(curl -s https://www.cloudflare.com/ips-v4)
     CF_IPV6=$(curl -s https://www.cloudflare.com/ips-v6)
     if [[ -z "$CF_IPV4" ]]; then
-        log_error "无法获取 Cloudflare IP，请检查网络连接"
+        error "无法获取 Cloudflare IP，请检查网络连接"
     
     else
-        log_info "正在配置 Nginx Real IP 模块 (开启递归模式)..."
+        info "正在配置 Nginx Real IP 模块 (开启递归模式)..."
         NGINX_CONF="/etc/nginx/nginx.conf"
         if sudo grep -q "real_ip_header CF-Connecting-IP" "$NGINX_CONF"; then
-            log_warning "Nginx 似乎已配置 Cloudflare real_ip，跳过修改"
+            warn "Nginx 似乎已配置 Cloudflare real_ip，跳过修改"
         else
             # 备份
             sudo cp "$NGINX_CONF" "${NGINX_CONF}.bak"
@@ -2800,10 +2983,10 @@ cf_fail2ban_install(){
             sudo sed -i "/http {/a $REAL_IP_CONF" "$NGINX_CONF"
             
             sudo nginx -t && sudo nginx -s reload
-            log_success "Nginx 配置更新成功并已重启"
+            success "Nginx 配置更新成功并已重启"
         fi
         # 获取 CF API 凭证
-        log_warning "请输入 Cloudflare API Token (需 Firewall 权限):"
+        warn "请输入 Cloudflare API Token (需 Firewall 权限):"
         read -p "Token: " CF_API_TOKEN
         echo
         echo -e "${YELLOW}请输入防御域名的 Zone ID:${NC}"
@@ -2811,11 +2994,10 @@ cf_fail2ban_install(){
         
         # 简单验证
         if [[ ${#CF_API_TOKEN} -lt 10 || ${#CF_ZONE_ID} -lt 10 ]]; then
-            log_error "凭证格式似乎不正确"
+            error "凭证格式似乎不正确"
 
         else
-            log_info "正在配置 Fail2ban 动作与白名单..."
-    
+            info "正在配置 Fail2ban 动作与白名单..."
             #创建 Action
             sudo cat > /etc/fail2ban/action.d/cloudflare.conf <<EOF
 [Definition]
@@ -2842,7 +3024,7 @@ EOF
             # 确保 [DEFAULT] 存在并设置 ignoreip
             if ! grep -q "\[DEFAULT\]" "$JAIL_CONF" 2>/dev/null; then
                 echo -e "[DEFAULT]\n" > "$JAIL_CONF"
-                log_success "$JAIL_CONF文件创建完成"
+                success "$JAIL_CONF文件创建完成"
             fi
             
             # 更新 ignoreip，包含本地 IP 和 CF 所有节点
@@ -2858,8 +3040,9 @@ filter = nginx-limit
 action = cloudflare
          iptables-multiport[name=nginx, port="http,https"]
 logpath = /var/log/nginx/access.log
-findtime = 60
-maxretry = 30
+backend = polling
+findtime = 600
+maxretry = 10
 bantime = 3600
 EOF
 
@@ -2871,7 +3054,7 @@ ignoreregex =
 EOF
 
             sudo systemctl restart fail2ban
-            log_success "Fail2ban 配置已完成，Cloudflare IP 已加入白名单保护"
+            success "Fail2ban 配置已完成，Cloudflare IP 已加入白名单保护"
         fi
 
 
@@ -2882,7 +3065,7 @@ EOF
 
 unblock_ip(){
     while true; do
-        log_title "解封Fail2ban监狱中IP地址"
+        title "解封Fail2ban监狱中IP地址"
         read -p "请输入要解封IP地址，回车确认/跳过: " unblock
         if [[ -z "$unblock" ]]; then
             break
@@ -2890,55 +3073,55 @@ unblock_ip(){
 
         # IPv4 格式校验
         if [[ ! "$unblock" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
-            log_error "无效IP地址格式: $unblock"
+            error "无效IP地址格式: $unblock"
             continue
         fi
 
         # 执行解封命令
         if sudo fail2ban-client set nginx-limit unbanip "$unblock" >/dev/null 2>&1; then
-            log_success "解封的IP地址：$unblock"
+            success "解封的IP地址：$unblock"
         else
-            log_error "解封失败，IP地址可能不在监狱中或命令执行错误: $unblock"
+            error "解封失败，IP地址可能不在监狱中或命令执行错误: $unblock"
         fi
     done
 }
 cf_fail2ban_uninstall(){
-    log_title "卸载Fail2ban"
-    log_info "正在还原 Nginx 配置..."
+    title "卸载Fail2ban"
+    info "正在还原 Nginx 配置..."
     local nginx_conf="/etc/nginx/nginx.conf"
     # 备份
     sudo cp "$nginx_conf" "${nginx_conf}.uninstall.bak"
-    log_info "已备份到 ${nginx_conf}.uninstall.bak"
+    info "已备份到 ${nginx_conf}.uninstall.bak"
 
-    log_info "删除Cloudflare地址段内容"
+    info "删除Cloudflare地址段内容"
     sudo sed -i '/# Cloudflare Real IP Configuration/,/real_ip_recursive on;/d' "$nginx_conf"
 
-    log_info "Nginx 配置已还原并重载"
+    info "Nginx 配置已还原并重载"
     sudo nginx -s reload
     
 
-    log_info "停止 Fail2ban服务..."
+    info "停止 Fail2ban服务..."
     systemctl stop fail2ban 2>/dev/null || true
     systemctl disable fail2ban 2>/dev/null || true
 
-    log_info "卸载 Fail2ban软件"
+    info "卸载 Fail2ban软件"
     sudo apt-get purge fail2ban -y
 
-    log_info "删除残留目录"
+    info "删除残留目录"
     sudo rm -rf /etc/fail2ban /var/lib/fail2ban /var/log/fail2ban
 
-    log_info "清理 iptables 中的 fail2ban 残留规则..."
+    info "清理 iptables 中的 fail2ban 残留规则..."
     if ! check_cmd iptables &>/dev/null; then
-        log_info "iptables 未安装，跳过"
+        info "iptables 未安装，跳过"
     
     else
         local chains=$(sudo iptables -L 2>/dev/null | grep -E '^Chain fail2ban-' | awk '{print $2}')
         if [[ -z "$chains" ]]; then
-            log_info "未发现残留的 fail2ban 链"
+            info "未发现残留的 fail2ban 链"
 
         else
             for chain in $chains; do
-                log_info "刷新并删除链: $chain"
+                info "刷新并删除链: $chain"
                 sudo iptables -F "$chain" 2>/dev/null || true
                 sudo iptables -X "$chain" 2>/dev/null || true
             done
@@ -2949,9 +3132,430 @@ cf_fail2ban_uninstall(){
         fi
     fi
 
-    log_success "卸载完成"
+    success "卸载完成"
 
 }
+
+cf_lua_redis_panel(){
+    local cf_lua_redis_status
+    while true; do
+        if redis-cli ping > /dev/null 2>&1 && \
+        [ -f "/etc/nginx/lua/ip_ban.lua" ] && \
+        [ -f "/etc/nginx/lua/config.lua" ]; then
+            cf_lua_redis_status="服务运行中"
+        else
+            cf_lua_redis_status="不存在"
+        fi
+        select_menu "Cloudflare + Nginx + Lua + Redis 动态IP封禁 状态：$cf_lua_redis_status" "安装并运行" "查看监狱小黑屋" "解封IP地址" "卸载清理"  "返回上级菜单"
+        choice=$?
+        case $choice in
+            0) clear;cf_lua_redis_install;go_back;;
+            1) clear;if redis-cli ping > /dev/null 2>&1 && [ -f "/etc/nginx/lua/ip_ban.lua" ] && [ -f "/etc/nginx/lua/config.lua" ]; then redis-cli KEYS "ban:*";else warn "未安装" ;fi ;go_back;;
+            2) clear;if redis-cli ping > /dev/null 2>&1 && [ -f "/etc/nginx/lua/ip_ban.lua" ] && [ -f "/etc/nginx/lua/config.lua" ]; then unblock_lua_redis_ip;else warn "未安装" ;fi ;go_back;;
+            3) clear;if redis-cli ping > /dev/null 2>&1 && [ -f "/etc/nginx/lua/ip_ban.lua" ] && [ -f "/etc/nginx/lua/config.lua" ]; then cf_lua_redis_uninstall;else warn "未安装" ;fi ;go_back;;
+            4) return ;;
+        esac
+    done
+}
+
+
+
+cf_lua_redis_install(){
+    local NGINX_MAIN_CONF="/etc/nginx/nginx.conf"
+    local NGINX_CONF_DIR="/etc/nginx/conf.d"
+    local LUA_DIR="/etc/nginx/lua"
+    local LUA_LIB_DIR="$LUA_DIR/resty"
+    local LUA_FILE="$LUA_DIR/ip_ban.lua"
+    local LUA_CONFIG="$LUA_DIR/config.lua"
+    local CF_CONF="$LUA_DIR/cloudflare_realip.conf"
+    local WHITELIST_CONF="$LUA_DIR/whitelist.txt"
+    # 封禁策略 (可根据实际调整)
+    local FAST_LIMIT=20          # 短窗口阈值 (2秒)
+    local SLOW_LIMIT=30          # 长窗口阈值 (60秒)
+    local BAN_TTL=3600           # 封禁时长 (秒)
+    local CACHE_TTL=60           # 本地缓存黑名单时间 (秒)
+    # 降级开关 (Redis故障时仅依赖本地缓存)
+    local REDIS_FAIL_OPEN=true   # true=Redis故障时放行，false=则拒绝所有请求(保守)
+    local install_status=false
+    #安装依赖
+    title "安装依赖"
+    case "$(detect_os)" in
+        debian|ubuntu)
+            local -A MY_PKG_MAP=(
+                ["nginx-extras"]="nginx-extras"
+                ["redis-server"]="redis-server"
+            )
+            check_and_install_tools MY_PKG_MAP "nginx-extras" "redis-server"
+            sudo systemctl enable redis-server nginx
+            NGINX_SERVICE="nginx"
+            REDIS_SERVICE="redis-server"
+            REDIS_CONF="/etc/redis/redis.conf"
+            install_status=true
+            ;;
+        centos|rhel|rocky|almalinux)
+            local INSTALL="sudo yum install -y"
+            # 安装 EPEL
+            $INSTALL epel-release
+            
+            # 检测 CentOS 版本
+            if [[ "$OS_VERSION_ID" =~ ^7 ]]; then
+                $INSTALL https://openresty.org/package/centos/7/openresty.repo
+            elif [[ "$OS_VERSION_ID" =~ ^8 ]]; then
+                $INSTALL https://openresty.org/package/centos/8/openresty.repo
+            elif [[ "$OS_VERSION_ID" =~ ^9 ]]; then
+                $INSTALL https://openresty.org/package/centos/9/openresty.repo
+            else
+                warn "未知 CentOS 版本，尝试使用 CentOS 7 仓库"
+                $INSTALL https://openresty.org/package/centos/7/openresty.repo
+            fi
+            
+            $INSTALL openresty redis wget curl
+            
+            # 尝试安装 lua-resty-redis，失败则手动下载
+            if ! $INSTALL lua-resty-redis 2>/dev/null; then
+                warn "yum 安装 lua-resty-redis 失败，将手动下载"
+            fi
+            
+            sudo systemctl enable redis openresty
+            NGINX_SERVICE="openresty"
+            REDIS_SERVICE="redis"
+            REDIS_CONF="/etc/redis.conf"
+            if [ ! -f "$REDIS_CONF" ] && [ -f /etc/redis/redis.conf ]; then
+                REDIS_CONF="/etc/redis/redis.conf"
+            fi
+            
+            # 创建软链接以便使用 nginx 命令（可选）
+            if [ ! -f /usr/sbin/nginx ] && [ -f /usr/local/openresty/nginx/sbin/nginx ]; then
+                sudo ln -sf /usr/local/openresty/nginx/sbin/nginx /usr/sbin/nginx
+            fi
+            install_status=true
+            ;;
+        *)
+            error "不支持的操作系统: $(detect_os)"
+            ;;
+    esac
+    if [ "$install_status" = true ];then
+        info "部署 lua-resty-redis 库..."
+        sudo mkdir -p "$LUA_LIB_DIR"
+        if [ ! -f "$LUA_LIB_DIR/redis.lua" ]; then
+            sudo wget -qO "$LUA_LIB_DIR/redis.lua" \
+                https://raw.githubusercontent.com/openresty/lua-resty-redis/master/lib/resty/redis.lua
+        fi
+
+        info "生成 Lua 配置文件..."
+        sudo cat > "$LUA_CONFIG" <<EOF
+-- IP 封禁 Lua 配置文件
+local _M = {}
+_M.fast_limit = $FAST_LIMIT
+_M.slow_limit = $SLOW_LIMIT
+_M.ban_ttl = $BAN_TTL
+_M.cache_ttl = $CACHE_TTL
+_M.whitelist_file = "$WHITELIST_CONF"
+_M.redis_fail_open = $([ "$REDIS_FAIL_OPEN" = true ] && echo "true" || echo "false")
+return _M
+EOF
+        info "需要修改封禁策略，请修改$LUA_CONFIG的文件"
+
+        if [ ! -f "$WHITELIST_CONF" ]; then
+        info "创建白名单模板文件: $WHITELIST_CONF"
+        sudo cat > "$WHITELIST_CONF" <<EOF
+# 白名单IP列表，每行一个 (支持CIDR，如 192.168.1.0/24)
+# 127.0.0.1
+EOF
+        fi
+
+        info "生成 Lua 拦截脚本 (支持白名单、降级、子请求过滤)..."
+        sudo cat > "$LUA_FILE" <<'LUAEOF'
+local config = require "config"
+local redis = require "resty.redis"
+local bit = require "bit"  -- 引入位运算库
+
+local cache = ngx.shared.ip_ban_cache
+local client_ip = ngx.req.get_headers()["CF-Connecting-IP"] or ngx.var.remote_addr
+
+-- 过滤子请求和内部重定向
+if ngx.is_subrequest or ngx.req.is_internal() then
+    return
+end
+
+-- 简单的 IP/CIDR 白名单匹配
+local function ip_in_cidr(ip, cidr)
+    local cidr_parts = {}
+    for part in string.gmatch(cidr, "[^/]+") do
+        table.insert(cidr_parts, part)
+    end
+    if #cidr_parts ~= 2 then return ip == cidr end
+    
+    local cidr_ip = cidr_parts[1]
+    local mask = tonumber(cidr_parts[2])
+    if not mask then return ip == cidr end
+    
+    local function ip_to_bits(ip_str)
+        local bits = {}
+        for octet in string.gmatch(ip_str, "%d+") do
+            local num = tonumber(octet)
+            for i = 7, 0, -1 do
+                -- 修改此处：使用 bit.band 和 bit.rshift 代替 & 和 >>
+                table.insert(bits, bit.band(bit.rshift(num, i), 1))
+            end
+        end
+        return bits
+    end
+    
+    local ip_bits = ip_to_bits(ip)
+    local cidr_bits = ip_to_bits(cidr_ip)
+    
+    for i = 1, mask do
+        if ip_bits[i] ~= cidr_bits[i] then
+            return false
+        end
+    end
+    return true
+end
+
+local function is_whitelisted(ip)
+    local whitelist = config.whitelist
+    if not whitelist then
+        local file = io.open(config.whitelist_file, "r")
+        if file then
+            whitelist = {}
+            for line in file:lines() do
+                line = line:match("^%s*(.-)%s*$")
+                if line and not line:match("^#") and line ~= "" then
+                    table.insert(whitelist, line)
+                end
+            end
+            file:close()
+            config.whitelist = whitelist
+        else
+            config.whitelist = {}
+        end
+    end
+    for _, entry in ipairs(config.whitelist) do
+        if entry:find("/") then
+            if ip_in_cidr(ip, entry) then return true end
+        elseif entry == ip then
+            return true
+        end
+    end
+    return false
+end
+
+if is_whitelisted(client_ip) then
+    return
+end
+
+-- 本地缓存检查
+if cache:get(client_ip) == 1 then
+    ngx.exit(403)
+end
+
+local red = redis:new()
+red:set_timeouts(200, 200, 200)
+local ok, err = red:connect("127.0.0.1", 6379)
+
+if not ok then
+    ngx.log(ngx.WARN, "[BAN] Redis connection failed: ", err)
+    if not config.redis_fail_open then
+        ngx.exit(403)
+    end
+    return
+end
+
+local is_banned, _ = red:get("ban:" .. client_ip)
+if is_banned ~= ngx.null then
+    cache:set(client_ip, 1, config.cache_ttl)
+    red:set_keepalive(10000, 100)
+    ngx.exit(403)
+end
+
+local fast_key = "f_cnt:" .. client_ip
+local slow_key = "s_cnt:" .. client_ip
+local fast_val, _ = red:incr(fast_key)
+local slow_val, _ = red:incr(slow_key)
+
+if fast_val == 1 then red:expire(fast_key, 2) end
+if slow_val == 1 then red:expire(slow_key, 60) end
+
+local banned = false
+if fast_val > config.fast_limit then
+    banned = true
+    ngx.log(ngx.ERR, "[BAN] BURST (", fast_val, "/", config.fast_limit, ") ", client_ip)
+elseif slow_val > config.slow_limit then
+    banned = true
+    ngx.log(ngx.ERR, "[BAN] SUSTAINED (", slow_val, "/", config.slow_limit, ") ", client_ip)
+end
+
+if banned then
+    red:setex("ban:" .. client_ip, config.ban_ttl, "1")
+    cache:set(client_ip, 1, config.cache_ttl)
+    red:set_keepalive(10000, 100)
+    ngx.exit(403)
+end
+
+red:set_keepalive(10000, 100)
+LUAEOF
+        info "生成 Cloudflare 真实IP配置文件..."
+        sudo cat > "$CF_CONF" <<EOF
+# Cloudflare IP 列表 (由脚本每日更新)
+set_real_ip_from 103.21.244.0/22;
+set_real_ip_from 103.22.200.0/22;
+set_real_ip_from 103.31.4.0/22;
+set_real_ip_from 104.16.0.0/13;
+set_real_ip_from 104.24.0.0/14;
+set_real_ip_from 108.162.192.0/18;
+set_real_ip_from 131.0.72.0/22;
+set_real_ip_from 141.101.64.0/18;
+set_real_ip_from 162.158.0.0/15;
+set_real_ip_from 172.64.0.0/13;
+set_real_ip_from 173.245.48.0/20;
+set_real_ip_from 188.114.96.0/20;
+set_real_ip_from 190.93.240.0/20;
+set_real_ip_from 197.234.240.0/22;
+set_real_ip_from 198.41.128.0/17;
+set_real_ip_from 2400:cb00::/32;
+set_real_ip_from 2606:4700::/32;
+real_ip_header CF-Connecting-IP;
+EOF
+        info "注入全局拦截钩子到 Nginx 主配置..."
+        sudo sed -i '/lua_shared_dict/d' "$NGINX_MAIN_CONF"
+        sudo sed -i '/lua_package_path/d' "$NGINX_MAIN_CONF"
+        sudo sed -i '/access_by_lua_file/d' "$NGINX_MAIN_CONF"
+        sudo sed -i "/cloudflare_realip.conf/d" "$NGINX_MAIN_CONF"
+        sudo sed -i "/http {/a \    lua_package_path \"$LUA_DIR/?.lua;;\";\n    lua_shared_dict ip_ban_cache 20m;\n    include $CF_CONF;\n    access_by_lua_file $LUA_FILE;" "$NGINX_MAIN_CONF"
+        info "配置 Redis 内存限制 (200MB, LRU)..."
+        if [ -f "$REDIS_CONF" ]; then
+            if ! grep -q "maxmemory 200mb" "$REDIS_CONF"; then
+                echo "maxmemory 200mb" >> "$REDIS_CONF"
+                echo "maxmemory-policy allkeys-lru" >> "$REDIS_CONF"
+                sudo systemctl restart "$REDIS_SERVICE"
+            fi
+        else
+            warn "未找到 Redis 配置文件，跳过内存限制设置"
+        fi
+        info "配置 Cloudflare IP 每日自动更新 (cron job)..."
+        sudo cat > /usr/local/bin/update_cf_ips.sh <<EOF
+#!/bin/bash
+CF_IPV4_URL="https://www.cloudflare.com/ips-v4"
+CF_IPV6_URL="https://www.cloudflare.com/ips-v6"
+CF_CONF="$CF_CONF"
+TMP_CONF="\${CF_CONF}.tmp"
+
+echo "# Cloudflare IP list - Updated \$(date)" > \$TMP_CONF
+for url in \$CF_IPV4_URL \$CF_IPV6_URL; do
+    curl -s \$url | while read ip; do
+        echo "set_real_ip_from \$ip;" >> \$TMP_CONF
+    done
+done
+echo "real_ip_header CF-Connecting-IP;" >> \$TMP_CONF
+
+if [ -s \$TMP_CONF ]; then
+    mv \$TMP_CONF \$CF_CONF
+    systemctl reload $NGINX_SERVICE
+    echo "\$(date): Cloudflare IPs updated" >> /var/log/cf_ip_updater.log
+else
+    rm -f \$TMP_CONF
+    echo "ERROR: Failed to fetch CF IPs" >> /var/log/cf_ip_updater.log
+fi
+EOF
+        sudo chmod +x /usr/local/bin/update_cf_ips.sh
+        sudo crontab -l 2>/dev/null | grep -v update_cf_ips.sh | crontab - 2>/dev/null || true
+        (sudo crontab -l 2>/dev/null; echo "0 3 * * * /usr/local/bin/update_cf_ips.sh") | crontab -
+        /usr/local/bin/update_cf_ips.sh
+        info "启动并验证服务..."
+        sudo systemctl restart "$REDIS_SERVICE"
+        if nginx -t 2>/dev/null || /usr/local/openresty/nginx/sbin/nginx -t 2>/dev/null; then
+            sudo systemctl restart "$NGINX_SERVICE"
+            success "✅ 部署成功！"
+            echo "------------------------------------------------"
+            echo "策略: 2秒内超过${FAST_LIMIT}次 或 60秒内超过${SLOW_LIMIT}次 -> 封禁${BAN_TTL}秒"
+            echo "白名单文件: $WHITELIST_CONF"
+            echo "封禁管理: redis-cli -> KEYS \"ban:*\" , DEL \"ban:<IP>\""
+            echo "------------------------------------------------"
+        else
+            error "Nginx 配置测试失败，回滚中..."
+            sudo sed -i '/lua_package_path/d' "$NGINX_MAIN_CONF"
+            sudo sed -i '/lua_shared_dict/d' "$NGINX_MAIN_CONF"
+            sudo sed -i '/access_by_lua_file/d' "$NGINX_MAIN_CONF"
+            sudo systemctl restart "$NGINX_SERVICE"
+        fi
+    else
+        warn "安装依赖有问题"
+    fi
+
+
+}
+
+unblock_lua_redis_ip(){
+    while true; do
+        title "解封redis监狱中IP地址"
+        read -p "请输入要解封IP地址，回车确认/跳过: " unblock
+        if [[ -z "$unblock" ]]; then
+            break
+        fi
+
+        # IPv4 格式校验
+        if [[ ! "$unblock" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+            error "无效IP地址格式: $unblock"
+            continue
+        fi
+
+        # 执行解封命令
+        if sudo redis-cli DEL "ban:$unblock" 2>&1; then
+            success "解封的IP地址：$unblock"
+        else
+            error "解封失败，IP地址可能不在监狱中或命令执行错误: $unblock"
+        fi
+    done
+}
+
+cf_lua_redis_uninstall(){
+    local NGINX_MAIN_CONF="/etc/nginx/nginx.conf"
+    local LUA_DIR="/etc/nginx/lua"
+    local CF_CONF="$LUA_DIR/cloudflare_realip.conf"
+    warn "开始卸载 IP 封禁系统..."
+    # 1. 恢复 Nginx 配置
+    info "移除 Nginx 配置注入..."
+    sudo sed -i '/lua_package_path/d' "$NGINX_MAIN_CONF"
+    sudo sed -i '/lua_shared_dict/d' "$NGINX_MAIN_CONF"
+    sudo sed -i '/access_by_lua_file/d' "$NGINX_MAIN_CONF"
+    sudo sed -i "/cloudflare_realip.conf/d" "$NGINX_MAIN_CONF"
+    
+    # 2. 删除生成的文件
+    info "删除 Lua 脚本、配置文件..."
+    sudo rm -rf "$LUA_DIR" "$CF_CONF"
+    
+    # 3. 移除定时任务
+    info "移除 Cloudflare IP 更新定时任务..."
+    sudo crontab -l 2>/dev/null | grep -v update_cf_ips.sh | crontab - 2>/dev/null || true
+    sudo rm -f /usr/local/bin/update_cf_ips.sh
+    
+    # 4. 询问是否移除软件包
+    read -p "是否移除 redis-server 和 nginx-extras? (y/N): " -r
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        if [ "$OS_FAMILY" = "debian" ]; then
+            sudo apt-get remove --purge -y nginx-extras redis-server
+            sudo apt-get autoremove -y
+        else
+            sudo yum remove -y openresty redis
+            sudo yum autoremove -y
+        fi
+    else
+        info "保留软件包，仅移除封禁配置"
+    fi
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        sudo apt-get remove --purge -y redis-server nginx-extras
+        sudo apt-get autoremove -y
+    else
+        info "保留 redis-server 和 nginx-extras，可手动管理"
+    fi
+    
+    systemctl restart nginx
+    info "✅ 卸载完成。"
+}
+
+
+
 
 
 # ------------- 子菜单功能7 -------------
@@ -2992,70 +3596,70 @@ cliproxyapi_panel(){
         choice=$?
         case $choice in
             0) clear; cliproxyapi_install_sh ;go_back;;
-            1) clear;if systemctl --user is-active --quiet cliproxyapi; then  cliproxyapi_uninstall_sh ;else log_warning "cliproxyapi未安装运行" ;fi ;go_back;;
+            1) clear;if systemctl --user is-active --quiet cliproxyapi; then  cliproxyapi_uninstall_sh ;else warn "cliproxyapi未安装运行" ;fi ;go_back;;
             2) return ;;
         esac
     done
 }
 
 cliproxyapi_install_sh(){
-    log_title "安装 cliproxyapi ..." 
+    title "安装 cliproxyapi ..." 
     curl -fsSL https://raw.githubusercontent.com/brokechubb/cliproxyapi-installer/refs/heads/master/cliproxyapi-installer | bash 
     clear
-    log_title "设置管理密钥"
+    title "设置管理密钥"
     CONFIG_FILE="$PWD/cliproxyapi/config.yaml"
     # 检查文件是否存在
     if [ ! -f "$CONFIG_FILE" ]; then
-        log_error "错误: 配置文件 $CONFIG_FILE 不存在"
+        error "错误: 配置文件 $CONFIG_FILE 不存在"
     
     else
         local BACKUP_FILE="${CONFIG_FILE}.backup.$(date +%Y%m%d_%H%M%S)"
         sudo cp "$CONFIG_FILE" "$BACKUP_FILE"
-        log_success "已备份原配置到 $BACKUP_FILE"
+        success "已备份原配置到 $BACKUP_FILE"
         
         while true; do
             read -p "请输入访问 管理密钥: " SECRET_KEY
             if [ -z "$SECRET_KEY" ]; then
                 # 如果留空，设置为空字符串（即 secret-key: ""）
-                log_error "如果不设置管理密钥，是无法访问呃（不可留空）"
+                error "如果不设置管理密钥，是无法访问呃（不可留空）"
                 continue
             else
                 ESCAPED_KEY=$(printf '%s\n' "$SECRET_KEY" | sed 's/[&/\]/\\&/g')
                 sed -i 's/^\([[:space:]]*secret-key:\) ".*"$/\1 "'"$ESCAPED_KEY"'"/' "$CONFIG_FILE"
-                log_success "已设置 secret-key"
+                success "已设置 secret-key"
                 break
             fi
         done
 
         sed -i 's/^\([[:space:]]*allow-remote:\) false$/\1 true/' "$CONFIG_FILE"
-        log_success "已设置 allow-remote: true"
-        log_success "配置文件修改完成！"
+        success "已设置 allow-remote: true"
+        success "配置文件修改完成！"
 
-        log_info "设置服务开机自启动"
+        info "设置服务开机自启动"
         systemctl --user enable cliproxyapi.service
-        log_info "启动cliproxyapi服务"
+        info "启动cliproxyapi服务"
         systemctl --user start cliproxyapi.service
-        log_success "访问Web UI的IP地址为：http://$(get_public_ip):8317/management.html#/login"
+        success "访问Web UI的IP地址为：http://$(get_public_ip):8317/management.html#/login"
     fi
 
 
 }
 
 cliproxyapi_uninstall_sh(){
-    log_title "卸载 cliproxyapi ..." 
+    title "卸载 cliproxyapi ..." 
 
     curl -fsSL https://raw.githubusercontent.com/brokechubb/cliproxyapi-installer/refs/heads/master/cliproxyapi-installer | bash -s uninstall
 
-    log_info "停止服务"
+    info "停止服务"
     systemctl --user stop cliproxyapi.service
-    log_info "禁用服务"
+    info "禁用服务"
     systemctl --user disable cliproxyapi.service
-    log_info "删除服务文件"
+    info "删除服务文件"
     sudo rm -f ~/.config/systemd/user/cliproxyapi.service
     sudo rm -rf $PWD/cliproxyapi
-    log_info "重新加载 systemd 配置"
+    info "重新加载 systemd 配置"
     systemctl --user daemon-reload
-    log_success "卸载完成"
+    success "卸载完成"
 }
 
 
@@ -3079,23 +3683,23 @@ wireguard_install(){
     # 开启 IP 转发
     enable_ip_forward() {
         if sudo sysctl net.ipv4.ip_forward | grep -q "= 0"; then
-            log_warning "IP 转发未开启，正在开启..."
+            warn "IP 转发未开启，正在开启..."
             sudo echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.conf
             sudo sysctl -p
-            log_success "IP 转发已开启并持久化。"
+            success "IP 转发已开启并持久化。"
         else
-            log_success "IP 转发已开启。"
+            success "IP 转发已开启。"
         fi
     }
 
-    log_title "请输入 WireGuard 服务器配置信息"
+    title "请输入 WireGuard 服务器配置信息"
     enable_ip_forward
     while true; do
         read -p "请输入服务器 IP 地址段 (CIDR 格式，例如 10.0.0.0/24，回车默认10.10.10.0/24): " server_cidr
         server_cidr=${server_cidr:-10.10.10.0/24}
         # 验证 CIDR 格式
         if ! [[ $server_cidr =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$ ]]; then
-            log_error "IP 地址段格式错误，应为 CIDR 格式，如 10.0.0.0/24"
+            error "IP 地址段格式错误，应为 CIDR 格式，如 10.0.0.0/24"
             continue
         else
             break
@@ -3108,7 +3712,7 @@ wireguard_install(){
         server_port=${server_port:-10086}
         # 验证端口
         if ! [[ $server_port =~ ^[0-9]+$ ]] || (( server_port < 1 || server_port > 65535 )); then
-            log_error "端口号必须是 1-65535 之间的数字。"
+            error "端口号必须是 1-65535 之间的数字。"
             continue
         else
             break
@@ -3122,7 +3726,7 @@ wireguard_install(){
 
         # 验证客户端数量
         if ! [[ $client_num =~ ^[0-9]+$ ]] || (( client_num < 1 )); then
-            log_error "客户端数量必须是正整数。"
+            error "客户端数量必须是正整数。"
             continue
         else
             break
@@ -3137,13 +3741,13 @@ wireguard_install(){
     net=$(( net & mask ))
     max_hosts=$(( (1 << (32 - cidr)) - 2 ))
     if (( client_num > max_hosts )); then
-        log_error "子网 $server_cidr 最多支持 $max_hosts 个客户端，但您请求了 $client_num 个。"
+        error "子网 $server_cidr 最多支持 $max_hosts 个客户端，但您请求了 $client_num 个。"
     fi
 
     server_ip_int=$(( net + 1 ))
     server_ip="$(( (server_ip_int >> 24) & 255 )).$(( (server_ip_int >> 16) & 255 )).$(( (server_ip_int >> 8) & 255 )).$(( server_ip_int & 255 ))"
     server_ip_cidr="$server_ip/$cidr"
-    log_success "服务器将使用 IP: $server_ip_cidr"
+    success "服务器将使用 IP: $server_ip_cidr"
 
     # 生成服务器基础配置并获取公钥
     server_public_key=$(generate_server_base_config "$server_ip_cidr" "$server_port" | tr -d '\n')
@@ -3153,7 +3757,7 @@ wireguard_install(){
     start_wireguard
 
     # 生成客户端配置并添加到服务器
-    log_title "生成客户端配置..."
+    title "生成客户端配置..."
     for (( i=1; i<=client_num; i++ )); do
         client_ip_int=$(( net + 1 + i ))
         client_ip="$(( (client_ip_int >> 24) & 255 )).$(( (client_ip_int >> 16) & 255 )).$(( (client_ip_int >> 8) & 255 )).$(( client_ip_int & 255 ))"
@@ -3161,42 +3765,42 @@ wireguard_install(){
         add_client_peer "$i" "$client_pubkey" "$client_ip"
     done
 
-    log_title "所有客户端配置已生成完毕。"
+    title "所有客户端配置已生成完毕。"
     echo -e "${YELLOW}请确保防火墙已开放 UDP 端口 $server_port，否则客户端无法连接。${NC}" >&2
     echo -e "您可以使用以下命令查看服务器状态：" >&2
     echo -e "  wg show" >&2
     echo -e "  wg-quick up wg0   # 启动接口（如果尚未启动）" >&2
     echo -e "客户端配置文件为 client*.conf。" >&2
-    log_warning "如果wireguard无法联通，请重新安装更换端口试一下。"
+    warn "如果wireguard无法联通，请重新安装更换端口试一下。"
 
 
 }
 
 wireguard_uninstall(){
-    log_title "开始彻底清理 WireGuard 环境..."
+    title "开始彻底清理 WireGuard 环境..."
 
     # 停止并禁用所有 WireGuard 接口
     if command -v wg &>/dev/null; then
         interfaces=$(sudo wg show interfaces)
         for iface in $interfaces; do
-            log_warning "正在停止接口: $iface"
+            warn "正在停止接口: $iface"
             sudo wg-quick down "$iface" 2>/dev/null || true
             sudo systemctl disable "wg-quick@$iface" 2>/dev/null || true
         done
     fi
 
     # 删除所有配置文件和密钥
-    log_info "清理配置文件和密钥..."
+    info "清理配置文件和密钥..."
     sudo rm -rf /etc/wireguard/
     sudo rm -f client*.conf client*.png  # 清理当前目录下生成的客户端文件
 
     # 清理 IPTables 转发规则 (针对常见 NAT 配置)
-    log_info "检查并清理残留的 IPTables 转发规则..."
+    info "检查并清理残留的 IPTables 转发规则..."
     sudo iptables -t nat -F 2>/dev/null || true
     sudo iptables -F FORWARD 2>/dev/null || true
 
     # 卸载软件包
-    log_info "正在检测系统并卸载软件..."
+    info "正在检测系统并卸载软件..."
     case "$(detect_os)" in
         ubuntu|debian|kali)
             apt-get remove --purge -y wireguard wireguard-tools qrencode
@@ -3209,11 +3813,11 @@ wireguard_uninstall(){
             pacman -Rs --noconfirm wireguard-tools qrencode
             ;;
         *)
-            log_error "未能识别的系统类型，请手动卸载 wireguard-tools。"
+            error "未能识别的系统类型，请手动卸载 wireguard-tools。"
             ;;
     esac
     
-    log_success "清理完成！系统已恢复至 WireGuard 安装前的状态。"
+    success "清理完成！系统已恢复至 WireGuard 安装前的状态。"
 
 }
 
