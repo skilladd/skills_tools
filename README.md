@@ -9,6 +9,7 @@
 # 菜单功能
 1. 系统源更新/设置
 	1. 系统源的更新
+	2. 设置系统定时执行的任务
 2. 系统测试常用的工具
 	1. 获取系统信息详细
 	2. 服务器网络测试
@@ -29,7 +30,8 @@
 6. 网络安全工具
 	1. 信息收集
 	2. 网站防御
-		1. Cloudflare + Nginx + fail2ban防御
+		1. Cloudflare + Nginx + fail2ban  静态IP封禁(外防御)
+		2. Cloudflare + Nginx + Lua + Redis 动态IP封禁(内防御)
 7. 其他扩展工具
 	1. API密钥管理相关
 		1. CLIProxyAPI
