@@ -2747,14 +2747,15 @@ wireguard_panel(){
             1) wg_status="服务存在但未运行" ;;
             2) wg_status=$(check_docker "wg-easy") ;;
         esac
-        select_menu "wireguard面板安装 状态：$wg_status" "安装wireguard的WebUI面板(docker)" "卸载wireguard的WebUI面板(docker)"  "安装wireguard的面板(CLI)" "卸载wireguard的面板(CLI)"  "返回主菜单"
+        select_menu "wireguard面板安装 状态：$wg_status" "安装wireguard的WebUI面板(docker)" "卸载wireguard的WebUI面板(docker)"  "安装wireguard的面板(CLI)" "新增wireguard客户端(CLI)" "卸载wireguard的面板(CLI)"  "返回主菜单"
         choice=$?
         case $choice in
             0) clear;wireguard_docker_install;go_back;;
             1) clear;if sudo docker ps -a --format '{{.Names}}' | grep -qx 'wg-easy'; then sudo docker compose -f "/tmp/wg-easy/docker-compose.yml" down;sudo docker system prune -a;sudo rm -rf "/tmp/wg-easy";success "删除wg-easy容器成功";else warn "wg-easy未安装运行" ;fi ;go_back;;
             2) clear;wireguard_install;go_back;;
-            3) clear;check_service "wg-quick@" ; if [[ $? -ne 2 ]]; then wireguard_uninstall ; else warn "wireguard未安装运行"; fi ; go_back;;
-            4) return ;;
+            3) clear;check_service "wg-quick@" ; if [[ $? -ne 2 ]]; then add_wireguard_clients ; else warn "wireguard未安装运行"; fi ; go_back;;
+            4) clear;check_service "wg-quick@" ; if [[ $? -ne 2 ]]; then wireguard_uninstall ; else warn "wireguard未安装运行"; fi ; go_back;;
+            5) return ;;
         esac
     done
 }
@@ -3561,7 +3562,7 @@ cf_lua_redis_uninstall(){
 
 submenu7() {
     while true; do
-        select_menu "其他扩展工具" "API密钥管理相关" "返回主菜单"
+        select_menu "其他扩展工具" "API密钥管理相关" "自动化工作流" "返回主菜单"
         choice=$?
         case $choice in
             0) clear;submenu7-1;;
@@ -3662,7 +3663,7 @@ cliproxyapi_uninstall_sh(){
 }
 
 
-
+   
 
 #----------------------------------------
 
@@ -3820,6 +3821,130 @@ wireguard_uninstall(){
 
 }
 
+add_wireguard_clients() {
+    # 确保接口已启动
+    if ! sudo wg show wg0 &>/dev/null; then
+        warn "接口 wg0 未运行，尝试启动..."
+        sudo wg-quick up wg0 || {
+            error "启动 wg0 失败，请检查配置。"
+        }
+    fi
+
+    #提取服务器信息
+    local server_port
+    server_port=$(grep -oP 'ListenPort\s*=\s*\K\d+' /etc/wireguard/wg0.conf)
+    local server_address_cidr
+    server_address_cidr=$(grep -oP 'Address\s*=\s*\K[0-9./]+' /etc/wireguard/wg0.conf)
+    local server_public_key
+    server_public_key=$(sudo wg show wg0 public-key | tr -d '\n')
+
+    if [[ -z "$server_port" || -z "$server_address_cidr" || -z "$server_public_key" ]]; then
+        error "无法从服务器配置中提取端口/地址/公钥，请检查 /etc/wireguard/wg0.conf。"
+    fi
+
+    # 计算子网信息
+    IFS='/' read -r network cidr <<< "$server_address_cidr"
+    IFS='.' read -r a b c d <<< "$network"
+    local net=$(( (a<<24) + (b<<16) + (c<<8) + d ))
+    local mask=$(( 0xffffffff << (32 - cidr) & 0xffffffff ))
+    net=$(( net & mask ))                         
+    local broadcast=$(( net | (~mask & 0xffffffff) ))
+    local server_ip_int=$(( net + 1 ))            
+
+    #收集已用 IP（服务器 Peer + 本地客户端文件
+    local used_ips=()
+
+    # 从服务器配置文件的 [Peer] 中提取 AllowedIPs（/32）
+    while IFS= read -r line; do
+        if [[ $line =~ AllowedIPs\s*=\s*([0-9.]+)/32 ]]; then
+            used_ips+=("${BASH_REMATCH[1]}")
+        fi
+    done < /etc/wireguard/wg0.conf
+
+    # 从本地已存在的客户端配置文件中提取 Address（防止服务器配置缺失）
+    for conf in client*.conf; do
+        [[ -f "$conf" ]] || continue
+        local addr
+        addr=$(sudo grep -oP '^\s*Address\s*=\s*\K[0-9.]+' "$conf" | head -1)
+        if [[ -n "$addr" ]]; then
+            # 避免重复加入
+            local found=0
+            for ip in "${used_ips[@]}"; do
+                [[ $ip == "$addr" ]] && { found=1; break; }
+            done
+            (( found == 0 )) && used_ips+=("$addr")
+        fi
+    done
+
+    # 计算当前最大已用 IP 整数
+    local max_ip_int=0
+    for ip in "${used_ips[@]}"; do
+        IFS='.' read -r ia ib ic id <<< "$ip"
+        local ip_int=$(( (ia<<24) + (ib<<16) + (ic<<8) + id ))
+        (( ip_int > max_ip_int )) && max_ip_int=$ip_int
+    done
+
+    # 确定下一个可用 IP
+    local next_ip_int
+    if (( ${#used_ips[@]} == 0 )); then
+        next_ip_int=$(( server_ip_int + 1 ))      # 第一个客户端从 .2 开始
+    else
+        next_ip_int=$(( max_ip_int + 1 ))
+    fi
+
+    if (( next_ip_int > broadcast - 1 )); then
+        error "子网已满，无可用 IP（广播地址: $broadcast，下一个: $next_ip_int）"
+    fi
+
+    title "向 WireGuard 服务器添加新客户端"
+    info "当前网络段: $server_address_cidr   端口: $server_port"
+    info "下一个可用 IP: $(( (next_ip_int>>24)&255 )).$(( (next_ip_int>>16)&255 )).$(( (next_ip_int>>8)&255 )).$(( next_ip_int&255 ))"
+
+    read -p "请输入服务器公网 IP 或域名（回车默认$(get_public_ip)）: " server_endpoint
+    server_endpoint=${server_endpoint:-$(get_public_ip)}
+
+    read -p "请输入 DNS 服务器（回车默认 8.8.8.8）: " server_dns
+    server_dns=${server_dns:-8.8.8.8}
+
+    local client_num
+    while true; do
+        read -p "需要添加的客户端数量: " client_num
+        if ! [[ $client_num =~ ^[0-9]+$ ]] || (( client_num < 1 )); then
+            error "请输入正整数"
+            continue
+        fi
+        # 检查剩余 IP 数量
+        local remaining=$(( (broadcast - 1) - next_ip_int + 1 ))
+        if (( client_num > remaining )); then
+            error "剩余 $remaining 个可用 IP，无法添加 $client_num 个客户端"
+            continue
+        fi
+        break
+    done
+
+    # 确定客户端文件名起始编号
+    local start_index=1
+    for f in client*.conf; do
+        [[ -f $f ]] || continue
+        if [[ $f =~ client([0-9]+)\.conf ]]; then
+            num=${BASH_REMATCH[1]}
+            (( num >= start_index )) && start_index=$(( num + 1 ))
+        fi
+    done
+
+    for (( i=0; i<client_num; i++ )); do
+        local client_ip_int=$(( next_ip_int + i ))
+        local client_ip="$(( (client_ip_int>>24)&255 )).$(( (client_ip_int>>16)&255 )).$(( (client_ip_int>>8)&255 )).$(( client_ip_int&255 ))"
+        local client_pubkey
+        client_pubkey=$(generate_client_config "$start_index" "$client_ip" "$server_public_key" "$server_endpoint" "$server_port" "$server_dns" | tr -d '\n')
+        add_client_peer "$start_index" "$client_pubkey" "$client_ip"
+        (( start_index++ ))
+    done
+
+    title "全部新客户端已添加并生成配置文件。"
+    warn "请确保防火墙已开放 UDP ${server_port}"
+    info "客户端配置文件为 client*.conf"
+}
 
 # 运行主菜单
 main_menu
